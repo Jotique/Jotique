@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JOTIQUE — Dashboard de Salud</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,300;0,400;0,600;0,700;0,800;0,900;1,700;1,900&family=Barlow:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --black:#080808;--dark:#111;--dark2:#181818;--dark3:#222;
+  --white:#f5f5f5;--white2:#aaa;--muted:#555;
+  --border:rgba(255,255,255,.07);--border2:rgba(255,255,255,.14);
+  --run:#ff4500;--run2:#ff6a33;
+  --mnt:#00c896;--mnt2:#00e8af;
+  --heart:#ff2d55;--sleep:#5e9fff;
+  --gold:#ffd700;--orange:#ff8c00;
+  --font:'Barlow Condensed',sans-serif;--body:'Barlow',sans-serif;
+  --ease:cubic-bezier(.16,1,.3,1);--spring:cubic-bezier(.34,1.56,.64,1);
+}
+html{scroll-behavior:smooth}
+body{background:var(--black);color:var(--white);font-family:var(--body);font-size:15px;line-height:1.5;cursor:none;overflow-x:hidden}
+#cur{position:fixed;width:9px;height:9px;background:var(--run);border-radius:50%;pointer-events:none;z-index:99999;transform:translate(-50%,-50%);mix-blend-mode:screen}
+#curR{position:fixed;width:32px;height:32px;border:1.5px solid rgba(255,69,0,.4);border-radius:50%;pointer-events:none;z-index:99998;transform:translate(-50%,-50%);opacity:.7}
+body.hov #cur{width:20px;height:20px;transition:width .2s var(--spring),height .2s var(--spring)}
+body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.04'/%3E%3C/svg%3E");background-size:180px;opacity:.5}
+.view{display:none;min-height:100vh;position:relative;z-index:1}
+.view.active{display:block;animation:vIn .5s var(--ease) both}
+@keyframes vIn{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+.nav{position:sticky;top:0;z-index:500;background:rgba(8,8,8,.92);backdrop-filter:blur(14px);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 28px;height:54px}
+.nav-logo{font-family:var(--font);font-size:1.6rem;font-weight:900;letter-spacing:.12em;color:var(--white)}
+.nav-logo span{color:var(--run)}
+.nav-back{display:none;align-items:center;gap:7px;font-family:var(--font);font-size:.85rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);background:none;border:none;cursor:none;transition:color .2s}
+.nav-back:hover{color:var(--run)}
+.nav-back svg{width:16px;height:16px}
+.nav-right{font-size:.65rem;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;text-align:right;line-height:1.7}
+.wrap{max-width:1160px;margin:0 auto;padding:0 28px 90px}
+.rev{opacity:0;transform:translateY(26px);transition:opacity .7s var(--ease),transform .7s var(--ease)}
+.rev.vis{opacity:1;transform:translateY(0)}
+/* HERO */
+.hero{padding:64px 0 48px;position:relative;overflow:hidden}
+.hero-bg{position:absolute;right:-40px;top:10px;font-family:var(--font);font-size:clamp(140px,28vw,260px);font-weight:900;color:rgba(255,255,255,.025);line-height:1;pointer-events:none;user-select:none}
+.hero-kicker{font-family:var(--font);font-size:.72rem;font-weight:700;letter-spacing:.28em;text-transform:uppercase;color:var(--run);margin-bottom:16px;display:flex;align-items:center;gap:10px}
+.hero-kicker::after{content:'';flex:0 0 36px;height:2px;background:var(--run)}
+.hero-title{font-family:var(--font);font-size:clamp(4.5rem,13vw,10rem);font-weight:900;line-height:.88;letter-spacing:-.02em;text-transform:uppercase}
+.hero-title .it{font-style:italic;color:var(--run);position:relative}
+.hero-title .it::after{content:'';position:absolute;bottom:3px;left:0;right:0;height:2px;background:var(--run);transform:scaleX(0);transform-origin:left;animation:lG 1s 1.1s var(--ease) forwards}
+@keyframes lG{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.hero-meta{margin-top:28px;display:flex;gap:28px;align-items:center;flex-wrap:wrap}
+.hmn{font-family:var(--font);font-size:2rem;font-weight:800;letter-spacing:-.02em;line-height:1}
+.hml{font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-top:2px}
+.hsep{width:1px;height:32px;background:var(--border2)}
+/* ECG */
+.ecg{height:46px;overflow:hidden;margin:8px 0 44px;position:relative}
+.ecg svg{position:absolute;width:200%;animation:sE 3.4s linear infinite}
+@keyframes sE{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+/* STAT GRID */
+.sg{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:48px}
+.sc{background:var(--dark2);border:1px solid var(--border);border-radius:3px;padding:22px 20px 18px;position:relative;overflow:hidden;cursor:none;transition:transform .35s var(--spring),border-color .3s,box-shadow .3s;user-select:none}
+.sc:hover{transform:translateY(-4px) scale(1.01);border-color:var(--border2);box-shadow:0 18px 50px rgba(0,0,0,.5)}
+.sc:active{transform:scale(.97)}
+.sc::before{content:'';position:absolute;inset:0;opacity:0;transition:opacity .3s;pointer-events:none}
+.sc.run::before{background:radial-gradient(circle at 0 0,rgba(255,69,0,.1),transparent 65%)}
+.sc.mnt::before{background:radial-gradient(circle at 0 0,rgba(0,200,150,.08),transparent 65%)}
+.sc.hrt::before{background:radial-gradient(circle at 0 0,rgba(255,45,85,.08),transparent 65%)}
+.sc.slp::before{background:radial-gradient(circle at 0 0,rgba(94,159,255,.08),transparent 65%)}
+.sc:hover::before{opacity:1}
+.sc::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;transform:scaleX(0);transform-origin:left;transition:transform .4s var(--ease)}
+.sc.run::after{background:linear-gradient(90deg,var(--run),var(--run2))}.sc.mnt::after{background:var(--mnt)}.sc.hrt::after{background:var(--heart)}.sc.slp::after{background:var(--sleep)}
+.sc:hover::after{transform:scaleX(1)}
+.sc-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}
+.sc-ico{font-size:1.3rem}
+.tap{font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);opacity:0;transition:opacity .3s}
+.sc:hover .tap{opacity:1}
+.scn{font-family:var(--font);font-size:3.4rem;font-weight:900;line-height:1;letter-spacing:-.02em}
+.sc.run .scn{color:var(--run)}.sc.mnt .scn{color:var(--mnt)}.sc.hrt .scn{color:var(--heart)}.sc.slp .scn{color:var(--sleep)}
+.scu{font-size:.68rem;color:var(--muted);margin-top:2px}
+.scf{margin-top:12px;padding-top:9px;border-top:1px solid var(--border);font-size:.65rem;color:var(--muted)}
+/* SECTION HEAD */
+.sh{display:flex;align-items:center;gap:13px;margin-bottom:20px}
+.sh h2{font-family:var(--font);font-size:1.1rem;font-weight:800;letter-spacing:.13em;text-transform:uppercase;white-space:nowrap}
+.sh-tag{font-size:.62rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);border:1px solid var(--border2);padding:2px 8px;border-radius:2px}
+.sh-line{flex:1;height:1px;background:linear-gradient(to right,var(--border2),transparent)}
+.card{background:var(--dark2);border:1px solid var(--border);border-radius:3px;padding:24px;position:relative;overflow:hidden}
+.ct{font-family:var(--font);font-size:1rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px}
+.cs{font-size:.68rem;color:var(--muted);margin-bottom:14px}
+/* PERF */
+.perf{display:grid;grid-template-columns:1fr 310px;gap:12px;margin-bottom:48px}
+.cp{stroke-dasharray:1400;stroke-dashoffset:1400;transition:stroke-dashoffset 2s var(--ease)}
+.cp.draw{stroke-dashoffset:0}
+.ca{opacity:0;transition:opacity 1.2s ease .5s}
+.ca.draw{opacity:1}
+/* SESSIONS */
+.sess{display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid var(--border);cursor:none;transition:padding-left .2s var(--spring)}
+.sess:last-child{border:none}.sess:hover{padding-left:5px}
+.sdot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.sdot.run{background:var(--run);box-shadow:0 0 8px var(--run)}.sdot.hike{background:var(--mnt);box-shadow:0 0 6px var(--mnt)}
+.sb{flex:1;min-width:0}
+.sn{font-family:var(--font);font-size:.95rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sm{font-size:.65rem;color:var(--muted);margin-top:1px}
+.sd{font-family:var(--font);font-size:1.2rem;font-weight:800;text-align:right}
+.sd.run{color:var(--run)}.sd.hike{color:var(--mnt)}
+.sp{font-size:.63rem;color:var(--muted);text-align:right;margin-top:1px}
+/* THREE */
+.three{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:48px}
+.ba{transform-origin:bottom;transform:scaleY(0);transition:transform .6s var(--spring)}.ba.grow{transform:scaleY(1)}
+.zr{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.zl{font-size:.6rem;color:var(--muted);width:40px;flex-shrink:0}
+.zt{flex:1;height:4px;background:rgba(255,255,255,.05);border-radius:2px;overflow:hidden}
+.zf{height:100%;border-radius:2px;transform:scaleX(0);transform-origin:left;transition:transform 1s var(--ease)}.zf.grow{transform:scaleX(1)}
+.zp{font-size:.6rem;color:var(--muted);width:24px;text-align:right}
+.rg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.rt{background:var(--dark3);border-radius:2px;padding:11px;border-left:2px solid var(--run);transition:transform .2s var(--spring)}.rt:hover{transform:translateX(3px)}
+.rd{font-size:.58rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px}
+.rv{font-family:var(--font);font-size:1.3rem;font-weight:800;color:var(--run)}
+.rn{font-size:.58rem;color:var(--muted);margin-top:1px}
+/* PHOTOS */
+.pstrip{display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px;margin-bottom:48px;height:200px}
+.pc{position:relative;overflow:hidden;border-radius:3px;cursor:none}
+.pc img{width:100%;height:100%;object-fit:cover;transition:transform .6s var(--ease),filter .4s;filter:brightness(.6) saturate(.7) contrast(1.1)}
+.pc:hover img{transform:scale(1.06);filter:brightness(.7) saturate(.9)}
+.po{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.7),transparent)}
+.pt{position:absolute;bottom:0;left:0;right:0;padding:14px 12px 10px}
+.pt h3{font-family:var(--font);font-size:1.1rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;line-height:1.1}
+.pt span{font-size:.62rem;color:rgba(255,255,255,.7);letter-spacing:.06em;text-transform:uppercase}
+/* HIKE GRID */
+.hg{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:48px}
+.hc{background:var(--dark2);border:1px solid var(--border);border-radius:3px;overflow:hidden;transition:transform .35s var(--spring),border-color .3s,box-shadow .3s;cursor:none}
+.hc:hover{transform:translateY(-5px) rotate(.2deg);border-color:var(--mnt);box-shadow:0 20px 50px rgba(0,0,0,.5)}
+.hi-w{position:relative;overflow:hidden;height:160px}
+.hi-w img{width:100%;height:100%;object-fit:cover;display:block;filter:brightness(.7) saturate(.8);transition:filter .4s,transform .5s var(--ease)}
+.hc:hover .hi-w img{filter:brightness(.9) saturate(1.05);transform:scale(1.05)}
+.hbadge{position:absolute;top:9px;left:9px;font-family:var(--font);font-size:.6rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--mnt);background:rgba(0,0,0,.55);border:1px solid rgba(0,200,150,.3);padding:2px 8px;border-radius:2px;backdrop-filter:blur(4px)}
+.hbody{padding:14px}
+.hname{font-family:var(--font);font-size:1rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;margin-bottom:10px}
+.hs{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.hsk{font-size:.58rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.hsv{font-family:var(--font);font-size:.95rem;font-weight:700;color:var(--mnt)}
+.hmap-btn{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;margin-top:12px;padding:9px;background:rgba(0,200,150,.08);border:1px solid rgba(0,200,150,.2);border-radius:2px;font-family:var(--font);font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--mnt);cursor:none;transition:background .2s,border-color .2s,transform .15s}
+.hmap-btn:hover{background:rgba(0,200,150,.15);border-color:rgba(0,200,150,.4);transform:scale(1.01)}
+/* VOMERO */
+.vom-card{background:var(--dark2);border:1px solid var(--border);border-radius:3px;overflow:hidden;display:grid;grid-template-columns:1fr 1fr;min-height:260px;margin-bottom:48px}
+.vom-vis{position:relative;overflow:hidden}
+.vom-vis img{width:100%;height:100%;object-fit:cover;filter:brightness(.8);transition:transform .6s var(--ease)}
+.vom-card:hover .vom-vis img{transform:scale(1.03)}
+.vom-glow{position:absolute;inset:0;background:radial-gradient(ellipse at 60% 80%,rgba(255,140,0,.2),transparent 60%);pointer-events:none}
+.vom-info{padding:28px;display:flex;flex-direction:column;justify-content:center}
+.vom-eye{font-family:var(--font);font-size:.65rem;font-weight:700;letter-spacing:.25em;text-transform:uppercase;color:var(--orange);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.vom-eye::before{content:'';width:24px;height:2px;background:var(--orange)}
+.vom-title{font-family:var(--font);font-size:2.6rem;font-weight:900;letter-spacing:-.02em;text-transform:uppercase;line-height:.9;margin-bottom:14px}
+.vom-title span{color:var(--orange);font-style:italic}
+.vom-desc{font-size:.78rem;color:var(--white2);line-height:1.7;margin-bottom:18px}
+.vom-specs{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}
+.vsk{font-size:.58rem;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
+.vsv{font-family:var(--font);font-size:1rem;font-weight:700;color:var(--orange);margin-top:1px}
+.vom-bar{margin-top:16px}
+.vom-bl{font-size:.62rem;color:var(--muted);margin-bottom:5px;display:flex;justify-content:space-between}
+.vom-bt{height:5px;background:rgba(255,255,255,.06);border-radius:3px;overflow:hidden}
+.vom-bf{height:100%;background:linear-gradient(90deg,var(--orange),var(--run));border-radius:3px;transform:scaleX(0);transform-origin:left;transition:transform 1.4s var(--ease)}
+.vom-bf.grow{transform:scaleX(1)}
+/* CNT */
+.cnt{display:inline}
+/* DETAIL VIEWS */
+.det-hero{padding:44px 0 34px;border-bottom:1px solid var(--border);margin-bottom:36px}
+.det-ey{font-family:var(--font);font-size:.7rem;font-weight:700;letter-spacing:.28em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+.det-title{font-family:var(--font);font-size:clamp(2.8rem,9vw,6rem);font-weight:900;letter-spacing:-.02em;text-transform:uppercase;line-height:.9}
+/* SLEEP */
+.slp-stages{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+.stg{background:var(--dark2);border:1px solid var(--border);border-radius:3px;padding:18px;text-align:center;position:relative;overflow:hidden}
+.stg::after{content:'';position:absolute;bottom:0;left:0;right:0;height:3px}
+.s-d::after{background:var(--sleep)}.s-r::after{background:var(--run2)}.s-c::after{background:var(--mnt)}.s-a::after{background:var(--muted)}
+.stg-n{font-family:var(--font);font-size:2.6rem;font-weight:900;line-height:1;letter-spacing:-.02em}
+.s-d .stg-n{color:var(--sleep)}.s-r .stg-n{color:var(--run2)}.s-c .stg-n{color:var(--mnt)}.s-a .stg-n{color:var(--white2)}
+.stg-l{font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:4px}
+.stg-s{font-size:.65rem;color:var(--white2);margin-top:7px;line-height:1.5}
+.slp-ins{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px}
+.si{background:var(--dark2);border:1px solid var(--border);border-radius:3px;padding:16px}
+.si-n{font-family:var(--font);font-size:1.8rem;font-weight:900;color:var(--sleep)}
+.si-l{font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-top:2px}
+.slp-bars{display:flex;gap:4px;align-items:flex-end;height:100px;margin-top:14px}
+.slb-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;height:100%;justify-content:flex-end}
+.slb-st{width:85%;display:flex;flex-direction:column;gap:1px}
+.slb-seg{width:100%;border-radius:1px;transform-origin:bottom;transform:scaleY(0);transition:transform .5s var(--spring)}
+.slb-seg.grow{transform:scaleY(1)}
+.slb-dl{font-size:.52rem;color:var(--muted);text-transform:uppercase}
+.slp-leg{display:flex;gap:14px;font-size:.63rem;color:var(--muted);margin-top:10px;flex-wrap:wrap}
+.ll{display:flex;align-items:center;gap:4px}
+.ld{width:8px;height:8px;border-radius:1px}
+/* RUN */
+.rkpis{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px}
+.rkpi{background:var(--dark2);border:1px solid var(--border);border-radius:3px;padding:18px;border-top:2px solid var(--run)}
+.rkpi-n{font-family:var(--font);font-size:2.5rem;font-weight:900;color:var(--run);line-height:1}
+.rkpi-l{font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-top:3px}
+.rtable{background:var(--dark2);border:1px solid var(--border);border-radius:3px;padding:22px;margin-bottom:24px}
+.rrow{display:grid;grid-template-columns:80px 1fr 65px 65px 80px;gap:8px;align-items:center;padding:11px 0;border-bottom:1px solid var(--border);transition:background .15s,padding-left .15s}
+.rrow:last-child{border:none}.rrow:not(.rhead):hover{background:rgba(255,255,255,.025);padding-left:6px;border-radius:3px}
+.rh{font-family:var(--font);font-size:.62rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.rdate{font-size:.72rem;color:var(--muted)}.rname{font-family:var(--font);font-size:.9rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.rdist{font-family:var(--font);font-size:1rem;font-weight:800;color:var(--run)}
+.rdur{font-size:.78rem;color:var(--white2)}.rpace{font-family:var(--font);font-size:.95rem;font-weight:700}
+/* HR */
+.hrkpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+.hrkpi{background:var(--dark2);border:1px solid var(--border);border-radius:3px;padding:16px;border-top:2px solid var(--heart)}
+.hrkpi-n{font-family:var(--font);font-size:2rem;font-weight:900;color:var(--heart);line-height:1}
+.hrkpi-l{font-size:.6rem;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-top:2px}
+.hr-bars{display:flex;gap:5px;align-items:flex-end;height:90px;margin-top:12px}
+.hrb-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end}
+.hrb{width:100%;border-radius:2px 2px 0 0;min-height:3px;transform-origin:bottom;transform:scaleY(0);transition:transform .5s var(--spring)}.hrb.grow{transform:scaleY(1)}
+.hrb-l{font-size:.53rem;color:var(--muted);text-transform:uppercase}
+/* MNT */
+.mkpis{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px}
+.mkpi{background:var(--dark2);border:1px solid var(--border);border-radius:3px;padding:18px;border-top:2px solid var(--mnt)}
+.mkpi-n{font-family:var(--font);font-size:2.4rem;font-weight:900;color:var(--mnt);line-height:1}
+.mkpi-l{font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-top:3px}
+.route-list{display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:28px}
+.ri{background:var(--dark2);border:1px solid var(--border);border-radius:3px;display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:16px;padding:16px 18px;cursor:none;transition:border-color .2s,transform .2s var(--spring)}
+.ri:hover{border-color:var(--mnt);transform:translateX(3px)}
+.rinum{font-family:var(--font);font-size:2rem;font-weight:900;color:rgba(255,255,255,.07);line-height:1;width:30px}
+.ri-name{font-family:var(--font);font-size:1.05rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase}
+.ri-meta{font-size:.68rem;color:var(--muted);margin-top:2px}
+.ri-stats{display:flex;gap:18px}
+.ri-sv{font-family:var(--font);font-size:1.1rem;font-weight:800;color:var(--mnt)}
+.ri-sl{font-size:.58rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.map-btn{display:flex;align-items:center;gap:5px;padding:8px 14px;background:rgba(0,200,150,.08);border:1px solid rgba(0,200,150,.25);border-radius:2px;font-family:var(--font);font-size:.68rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--mnt);cursor:none;transition:background .2s,border-color .2s;white-space:nowrap}
+.map-btn:hover{background:rgba(0,200,150,.15);border-color:rgba(0,200,150,.45)}
+/* ══ MAP MODAL ══ */
+.moverlay{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.9);backdrop-filter:blur(10px);display:none;align-items:center;justify-content:center;padding:20px}
+.moverlay.open{display:flex;animation:mIn .3s var(--ease)}
+@keyframes mIn{from{opacity:0}to{opacity:1}}
+.mbox{width:min(1000px,96vw);max-height:92vh;background:var(--dark);border:1px solid var(--border2);border-radius:4px;overflow:hidden;display:flex;flex-direction:column}
+.mhead{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);flex-shrink:0}
+.m-title{font-family:var(--font);font-size:1.1rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
+.m-close{background:none;border:1px solid var(--border2);border-radius:2px;color:var(--white2);padding:6px 14px;font-family:var(--font);font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;cursor:none;transition:border-color .2s,color .2s}
+.m-close:hover{border-color:var(--run);color:var(--run)}
+.mbody{flex:1;overflow:hidden;position:relative;display:flex;flex-direction:column}
+/* Map container */
+#leafmap{flex:1;min-height:360px;position:relative}
+/* Elevation profile below map */
+.elev-profile{height:110px;background:var(--dark2);border-top:1px solid var(--border);padding:10px 16px 6px;flex-shrink:0;position:relative}
+.elev-title{font-family:var(--font);font-size:.65rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+#elev-canvas{width:100%;height:70px;display:block}
+.mstats{display:flex;gap:20px;padding:12px 20px;border-top:1px solid var(--border);background:var(--dark2);flex-shrink:0;align-items:center}
+.ms-v{font-family:var(--font);font-size:1.2rem;font-weight:800;color:var(--mnt)}
+.ms-l{font-size:.58rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+/* Map layer toggle */
+.layer-toggle{position:absolute;top:10px;right:10px;z-index:1000;display:flex;flex-direction:column;gap:4px}
+.ltbtn{font-family:var(--font);font-size:.6rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:5px 10px;background:rgba(8,8,8,.85);border:1px solid var(--border2);border-radius:2px;color:var(--white2);cursor:none;transition:all .2s;backdrop-filter:blur(4px)}
+.ltbtn.active{background:rgba(0,200,150,.2);border-color:var(--mnt);color:var(--mnt)}
+.ltbtn:hover:not(.active){border-color:var(--border2);color:var(--white)}
+/* FOOTER */
+.footer{border-top:1px solid var(--border);padding:26px 0 0;display:flex;justify-content:space-between;align-items:center}
+.fbrand{font-family:var(--font);font-size:2.2rem;font-weight:900;letter-spacing:.12em;color:rgba(255,255,255,.06);text-transform:uppercase}
+.finfo{font-size:.65rem;color:var(--muted);text-align:right;line-height:1.8}
+/* leaflet dark overrides */
+.leaflet-container{background:#111 !important}
+.leaflet-control-attribution{background:rgba(8,8,8,.7)!important;color:#444!important;font-size:9px!important}
+.leaflet-control-attribution a{color:#555!important}
+/* RESPONSIVE */
+@media(max-width:920px){.sg{grid-template-columns:repeat(2,1fr)}.perf{grid-template-columns:1fr}.three{grid-template-columns:1fr 1fr}.hg{grid-template-columns:repeat(2,1fr)}.pstrip{grid-template-columns:1fr 1fr;height:auto}.pstrip .pc:last-child{display:none}.slp-stages{grid-template-columns:repeat(2,1fr)}.rkpis{grid-template-columns:1fr 1fr}.hrkpis{grid-template-columns:repeat(2,1fr)}.vom-card{grid-template-columns:1fr}.ri{grid-template-columns:auto 1fr}.ri-stats,.map-btn{display:none}}
+@media(max-width:600px){.wrap{padding:0 16px 60px}.sg{gap:8px}.three{grid-template-columns:1fr}.hg{grid-template-columns:1fr}.rrow{grid-template-columns:60px 1fr 58px 58px}.rrow>:nth-child(5){display:none}body{cursor:auto}#cur,#curR{display:none}.ltbtn{cursor:pointer}.m-close{cursor:pointer}.hmap-btn{cursor:pointer}.map-btn{cursor:pointer}}
+</style>
+</head>
+<body>
+<div id="cur"></div><div id="curR"></div>
+
+<nav class="nav" id="mnav">
+  <div class="nav-logo">JOTI<span>QUE</span></div>
+  <button class="nav-back" id="nbk" onclick="goHome()" style="display:none">
+    <svg fill="none" viewBox="0 0 16 16" stroke="currentColor" stroke-width="2.5"><path d="M10 3L5 8l5 5"/></svg>VOLVER
+  </button>
+  <div class="nav-right">Tu dashboard personal<br>19 ABR 2026</div>
+</nav>
+
+<!-- ══ MAIN ══ -->
+<div class="view active" id="v-main">
+<div class="wrap">
+  <section class="hero rev">
+    <div class="hero-bg">378</div>
+    <div class="hero-kicker">Dashboard personal · Apple Health</div>
+    <h1 class="hero-title"><span>En</span><span class="it">Forma</span></h1>
+    <div class="hero-meta">
+      <div><div class="hmn" style="color:var(--run)"><span class="cnt" data-t="378">0</span> km</div><div class="hml">corridos</div></div>
+      <div class="hsep"></div>
+      <div><div class="hmn" style="color:var(--mnt)"><span class="cnt" data-t="50">0</span></div><div class="hml">carreras</div></div>
+      <div class="hsep"></div>
+      <div><div class="hmn" style="color:var(--sleep)"><span class="cnt" data-t="12">0</span></div><div class="hml">rutas montaña</div></div>
+      <div class="hsep"></div>
+      <div><div class="hmn" style="color:var(--gold)"><span class="cnt" data-t="5238170">0</span></div><div class="hml">pasos totales</div></div>
+    </div>
+  </section>
+  <div class="ecg rev">
+    <svg height="46" viewBox="0 0 1400 46" preserveAspectRatio="none">
+      <path d="M0,23 L65,23 L80,23 L86,5 L93,41 L99,11 L105,23 L170,23 L235,23 L250,23 L256,5 L263,41 L269,11 L275,23 L340,23 L405,23 L420,23 L426,5 L433,41 L439,11 L445,23 L510,23 L575,23 L590,23 L596,5 L603,41 L609,11 L615,23 L680,23 L745,23 L760,23 L766,5 L773,41 L779,11 L785,23 L850,23 L915,23 L930,23 L936,5 L943,41 L949,11 L955,23 L1020,23 L1085,23 L1100,23 L1106,5 L1113,41 L1119,11 L1125,23 L1190,23 L1255,23 L1270,23 L1276,5 L1283,41 L1289,11 L1295,23 L1400,23" fill="none" stroke="rgba(255,69,0,.18)" stroke-width="1.5"/>
+      <path d="M1400,23 L1465,23 L1480,23 L1486,5 L1493,41 L1499,11 L1505,23 L1570,23 L1635,23 L1650,23 L1656,5 L1663,41 L1669,11 L1675,23 L1740,23 L1805,23 L1820,23 L1826,5 L1833,41 L1839,11 L1845,23 L1910,23 L1975,23 L1990,23 L1996,5 L2003,41 L2009,11 L2015,23 L2080,23 L2145,23 L2160,23 L2166,5 L2173,41 L2179,11 L2185,23 L2250,23 L2400,23" fill="none" stroke="rgba(255,69,0,.18)" stroke-width="1.5"/>
+    </svg>
+  </div>
+  <div class="sh rev"><h2>Resumen</h2><div class="sh-line"></div></div>
+  <div class="sg rev" style="transition-delay:.04s">
+    <div class="sc run" onclick="show('v-run')" tabindex="0"><div class="sc-top"><div class="sc-ico">🏃</div><div class="tap">VER →</div></div><div class="scn"><span class="cnt" data-t="57">0</span></div><div class="scu">km · abril 2026</div><div class="scf">Mejor mes: Enero 110 km</div></div>
+    <div class="sc mnt" onclick="show('v-mnt')" tabindex="0"><div class="sc-top"><div class="sc-ico">⛰️</div><div class="tap">VER →</div></div><div class="scn"><span class="cnt" data-t="88">0</span></div><div class="scu">km senderismo total</div><div class="scf">12 rutas registradas</div></div>
+    <div class="sc hrt" onclick="show('v-hrt')" tabindex="0"><div class="sc-top"><div class="sc-ico">❤️</div><div class="tap">VER →</div></div><div class="scn"><span class="cnt" data-t="34">0</span></div><div class="scu">ppm FC mínima</div><div class="scf">HRV media: 100 ms</div></div>
+    <div class="sc slp" onclick="show('v-slp')" tabindex="0"><div class="sc-top"><div class="sc-ico">🌙</div><div class="tap">VER →</div></div><div class="scn"><span class="cnt" data-t="6" data-dec=".8">0</span></div><div class="scu">horas prom / noche</div><div class="scf">14 noches registradas</div></div>
+  </div>
+  <div class="sh rev"><h2>En movimiento</h2><div class="sh-line"></div></div>
+  <!-- PHOTOS with Pinterest-style Unsplash images that load reliably -->
+  <div class="pstrip rev" style="transition-delay:.04s">
+    <div class="pc">
+      <img src="https://images.unsplash.com/photo-1571008887538-b36bb32f4571?w=900&q=80&auto=format&fit=crop" alt="Running" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1461897104016-0b3b00cc81ee?w=900&q=80'">
+      <div class="po"></div><div class="pt"><h3>50 Carreras</h3><span>378 km · sep–abr</span></div>
+    </div>
+    <div class="pc">
+      <img src="https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=600&q=80&auto=format&fit=crop" alt="Montaña" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1551632811-561732d1e306?w=600&q=80'">
+      <div class="po"></div><div class="pt"><h3>Montaña</h3><span>12 rutas</span></div>
+    </div>
+    <div class="pc">
+      <img src="https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=500&q=80&auto=format&fit=crop" alt="Gym" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=500&q=80'">
+      <div class="po"></div><div class="pt"><h3>Fuerza</h3><span>39 sesiones</span></div>
+    </div>
+  </div>
+  <div class="sh rev"><h2>Rendimiento</h2><span class="sh-tag">14 semanas</span><div class="sh-line"></div></div>
+  <div class="perf rev" style="transition-delay:.04s">
+    <div class="card">
+      <div class="ct">Km / semana</div><div class="cs">Running y montaña · Dic 2025 – Abr 2026</div>
+      <div style="display:flex;gap:14px;font-size:.63rem;color:var(--muted);margin-bottom:8px">
+        <span><span style="display:inline-block;width:12px;height:2px;background:var(--run);vertical-align:middle;margin-right:4px"></span>Running</span>
+        <span><span style="display:inline-block;width:12px;height:0;border-top:2px dashed var(--mnt);vertical-align:middle;margin-right:4px"></span>Montaña</span>
+      </div>
+      <svg viewBox="0 0 560 150" style="width:100%;overflow:visible" preserveAspectRatio="none">
+        <defs><linearGradient id="gR" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ff4500" stop-opacity=".18"/><stop offset="100%" stop-color="#ff4500" stop-opacity="0"/></linearGradient><linearGradient id="gM" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#00c896" stop-opacity=".12"/><stop offset="100%" stop-color="#00c896" stop-opacity="0"/></linearGradient></defs>
+        <line x1="28" y1="20" x2="560" y2="20" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="28" y1="57" x2="560" y2="57" stroke="rgba(255,255,255,.06)" stroke-width="1"/><line x1="28" y1="94" x2="560" y2="94" stroke="rgba(255,255,255,.06)" stroke-width="1"/>
+        <text x="0" y="17" font-family="Barlow Condensed" font-size="9" fill="#555">60</text><text x="0" y="54" font-family="Barlow Condensed" font-size="9" fill="#555">30</text><text x="0" y="91" font-family="Barlow Condensed" font-size="9" fill="#555">10</text>
+        <path class="ca" d="M30,73 L70,67 L110,44 L150,61 L190,65 L230,85 L270,88 L310,77 L350,72 L390,84 L430,94 L470,80 L510,69 L550,62 L550,130 L30,130 Z" fill="url(#gR)"/>
+        <path class="cp" d="M30,73 L70,67 L110,44 L150,61 L190,65 L230,85 L270,88 L310,77 L350,72 L390,84 L430,94 L470,80 L510,69 L550,62" fill="none" stroke="#ff4500" stroke-width="2.2" stroke-linejoin="round"/>
+        <path class="ca" d="M30,94 L70,88 L110,94 L150,94 L190,94 L230,94 L270,94 L310,80 L350,92 L390,94 L430,91 L470,78 L510,94 L550,94 L550,130 L30,130 Z" fill="url(#gM)"/>
+        <path class="cp" d="M30,94 L70,88 L110,94 L150,94 L190,94 L230,94 L270,94 L310,80 L350,92 L390,94 L430,91 L470,78 L510,94 L550,94" fill="none" stroke="#00c896" stroke-width="1.8" stroke-linejoin="round" stroke-dasharray="5 3"/>
+        <circle cx="110" cy="44" r="4.5" fill="#ff4500" stroke="#080808" stroke-width="1.5"/>
+        <text x="113" y="38" font-family="Barlow Condensed" font-size="8.5" fill="#ff4500">40.7km</text>
+        <circle cx="550" cy="62" r="4.5" fill="#ff4500" stroke="#080808" stroke-width="2"/>
+        <text x="20" y="147" font-family="Barlow Condensed" font-size="8.5" fill="#444">D22</text><text x="100" y="147" font-family="Barlow Condensed" font-size="8.5" fill="#444">E5</text><text x="182" y="147" font-family="Barlow Condensed" font-size="8.5" fill="#444">E19</text><text x="262" y="147" font-family="Barlow Condensed" font-size="8.5" fill="#444">F16</text><text x="342" y="147" font-family="Barlow Condensed" font-size="8.5" fill="#444">M2</text><text x="418" y="147" font-family="Barlow Condensed" font-size="8.5" fill="#444">M23</text><text x="498" y="147" font-family="Barlow Condensed" font-size="8.5" fill="#444">A6</text>
+      </svg>
+    </div>
+    <div class="card">
+      <div class="ct">Sesiones recientes</div><div class="cs">Últimas 7 actividades</div>
+      <div class="sess"><span class="sdot run"></span><div class="sb"><div class="sn">Carrera · 18 abr</div><div class="sm">38 min · 335 kcal</div></div><div><div class="sd run">4.1km</div><div class="sp">—</div></div></div>
+      <div class="sess"><span class="sdot run"></span><div class="sb"><div class="sn">Carrera · 16 abr</div><div class="sm">53 min · 526 kcal</div></div><div><div class="sd run">9.0km</div><div class="sp">5:54/km</div></div></div>
+      <div class="sess"><span class="sdot run"></span><div class="sb"><div class="sn">Carrera · 14 abr</div><div class="sm">57 min · 587 kcal</div></div><div><div class="sd run">10.2km</div><div class="sp">5:38/km</div></div></div>
+      <div class="sess"><span class="sdot run"></span><div class="sb"><div class="sn">Long run · 10 abr</div><div class="sm">61 min · 909 kcal</div></div><div><div class="sd run">11.0km</div><div class="sp">5:34/km</div></div></div>
+      <div class="sess"><span class="sdot run"></span><div class="sb"><div class="sn">Carrera · 12 abr</div><div class="sm">52 min · 785 kcal</div></div><div><div class="sd run">9.6km</div><div class="sp">5:22/km</div></div></div>
+      <div class="sess"><span class="sdot hike"></span><div class="sb"><div class="sn">Montaña · 2 abr</div><div class="sm">2h 4min · 487 kcal</div></div><div><div class="sd hike">6.0km</div><div class="sp">montaña</div></div></div>
+      <div class="sess"><span class="sdot hike"></span><div class="sb"><div class="sn">Montaña · 30 mar</div><div class="sm">5h 42min · 801 kcal</div></div><div><div class="sd hike">9.9km</div><div class="sp">montaña</div></div></div>
+    </div>
+  </div>
+  <div class="sh rev"><h2>Análisis</h2><div class="sh-line"></div></div>
+  <div class="three rev" style="transition-delay:.04s">
+    <div class="card">
+      <div class="ct">Volumen mensual</div><div class="cs">Km running</div>
+      <div style="display:flex;gap:7px;align-items:flex-end;height:70px">
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end"><div class="ba" style="height:8px;width:80%;background:rgba(255,69,0,.3);border-radius:2px 2px 0 0"></div><div style="font-size:.55rem;color:var(--muted)">S</div></div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end"><div class="ba" style="height:50px;width:80%;background:var(--run);border-radius:2px 2px 0 0"></div><div style="font-size:.55rem;color:var(--run);font-weight:600">O</div></div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end"><div class="ba" style="height:23px;width:80%;background:rgba(255,69,0,.4);border-radius:2px 2px 0 0"></div><div style="font-size:.55rem;color:var(--muted)">N</div></div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end"><div class="ba" style="height:46px;width:80%;background:rgba(255,69,0,.55);border-radius:2px 2px 0 0"></div><div style="font-size:.55rem;color:var(--muted)">D</div></div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end"><div class="ba" style="height:70px;width:80%;background:var(--run);border-radius:2px 2px 0 0;position:relative"><span style="position:absolute;top:-15px;left:50%;transform:translateX(-50%);font-size:.55rem;color:var(--run);font-weight:700">🏆</span></div><div style="font-size:.55rem;color:var(--run);font-weight:700">E</div></div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end"><div class="ba" style="height:7px;width:80%;background:rgba(255,69,0,.3);border-radius:2px 2px 0 0"></div><div style="font-size:.55rem;color:var(--muted)">F</div></div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end"><div class="ba" style="height:22px;width:80%;background:rgba(255,69,0,.4);border-radius:2px 2px 0 0"></div><div style="font-size:.55rem;color:var(--muted)">M</div></div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end"><div class="ba" style="height:37px;width:80%;background:rgba(255,69,0,.3);border:1px dashed var(--run);border-radius:2px 2px 0 0"></div><div style="font-size:.55rem;color:var(--run)">A*</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="ct">Zonas FC</div><div class="cs">FC reposo 34 · HRV 100ms</div>
+      <div class="zr"><div class="zl">Z1</div><div class="zt"><div class="zf" style="width:30%;background:var(--sleep)"></div></div><div class="zp">30%</div></div>
+      <div class="zr"><div class="zl">Z2</div><div class="zt"><div class="zf" style="width:45%;background:var(--mnt)"></div></div><div class="zp">45%</div></div>
+      <div class="zr"><div class="zl">Z3</div><div class="zt"><div class="zf" style="width:15%;background:var(--run)"></div></div><div class="zp">15%</div></div>
+      <div class="zr"><div class="zl">Z4</div><div class="zt"><div class="zf" style="width:7%;background:var(--gold)"></div></div><div class="zp">7%</div></div>
+      <div class="zr"><div class="zl">Z5</div><div class="zt"><div class="zf" style="width:3%;background:var(--heart)"></div></div><div class="zp">3%</div></div>
+      <div style="margin-top:10px;padding:7px 10px;background:rgba(0,200,150,.06);border-radius:2px;font-size:.63rem;color:var(--mnt)">✓ Distribución polarizada — ideal para resistencia</div>
+    </div>
+    <div class="card">
+      <div class="ct">Récords</div><div class="cs">Temporada 25–26</div>
+      <div class="rg">
+        <div class="rt"><div class="rd">Mejor ritmo</div><div class="rv">4:31</div><div class="rn">/km · 29 oct</div></div>
+        <div class="rt"><div class="rd">Más rápido</div><div class="rv">4:36</div><div class="rn">/km · 4 ene</div></div>
+        <div class="rt"><div class="rd">Mayor dist.</div><div class="rv">12.6</div><div class="rn">km · 5 ene</div></div>
+        <div class="rt"><div class="rd">Más kcal</div><div class="rv">909</div><div class="rn">kcal · 10 abr</div></div>
+      </div>
+    </div>
+  </div>
+  <!-- VOMERO -->
+  <div class="sh rev"><h2>Equipamiento</h2><span class="sh-tag">En los pies</span><div class="sh-line"></div></div>
+  <div class="vom-card rev" style="transition-delay:.04s">
+    <div class="vom-vis">
+      <img src="https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&q=80&auto=format&fit=crop" alt="Nike Vomero 18" onerror="this.src='https://images.unsplash.com/photo-1600185365926-3a2ce3cdb9eb?w=800&q=80'">
+      <div class="vom-glow"></div>
+    </div>
+    <div class="vom-info">
+      <div class="vom-eye">Zapatilla de running</div>
+      <div class="vom-title">NIKE<br><span>VOMERO</span><br>18</div>
+      <div class="vom-desc">Blancas con amortiguación naranja. La zapatilla con la que se han construido todos esos 378 km. ZoomX en el mediocampo para máximo retorno de energía y comodidad kilómetro tras kilómetro.</div>
+      <div class="vom-specs">
+        <div><div class="vsk">color</div><div class="vsv">Blanco / Naranja</div></div>
+        <div><div class="vsk">amortiguación</div><div class="vsv">ZoomX Max</div></div>
+        <div><div class="vsk">tipo</div><div class="vsv">Road Running</div></div>
+        <div><div class="vsk">uso</div><div class="vsv">Rodaje · Tempo</div></div>
+      </div>
+      <div class="vom-bar">
+        <div class="vom-bl"><span>Km acumulados esta temporada</span><span style="color:var(--orange)">378 / 800 km</span></div>
+        <div class="vom-bt"><div class="vom-bf" style="width:47.25%"></div></div>
+      </div>
+    </div>
+  </div>
+  <!-- HIKE CARDS -->
+  <div class="sh rev"><h2>Montaña</h2><span class="sh-tag">12 rutas</span><div class="sh-line"></div></div>
+  <div class="hg rev" style="transition-delay:.04s">
+    <div class="hc">
+      <div class="hi-w"><img src="https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=700&q=80&auto=format&fit=crop" alt="" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1486870591958-9b9d0d1dda99?w=700&q=80'"><span class="hbadge">Enero 2026</span></div>
+      <div class="hbody"><div class="hname">Ruta 13 Ene</div><div class="hs"><div><div class="hsk">distancia</div><div class="hsv">11.0 km</div></div><div><div class="hsk">D+</div><div class="hsv">896 m</div></div><div><div class="hsk">tiempo</div><div class="hsv">~3h</div></div><div><div class="hsk">dificultad</div><div class="hsv">ALTA</div></div></div>
+      <button class="hmap-btn" onclick="openMap('route_2026-01-13_11.07pm.gpx')">🗺 VER EN MAPA REAL</button></div>
+    </div>
+    <div class="hc">
+      <div class="hi-w"><img src="https://images.unsplash.com/photo-1501854140801-50d01698950b?w=700&q=80&auto=format&fit=crop" alt="" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=700&q=80'"><span class="hbadge">Enero 2026</span></div>
+      <div class="hbody"><div class="hname">Ruta 24 Ene</div><div class="hs"><div><div class="hsk">distancia</div><div class="hsv">9.7 km</div></div><div><div class="hsk">D+</div><div class="hsv">1023 m</div></div><div><div class="hsk">tiempo</div><div class="hsv">~3h</div></div><div><div class="hsk">dificultad</div><div class="hsv">MUY ALTA</div></div></div>
+      <button class="hmap-btn" onclick="openMap('route_2026-01-24_10.57pm.gpx')">🗺 VER EN MAPA REAL</button></div>
+    </div>
+    <div class="hc">
+      <div class="hi-w"><img src="https://images.unsplash.com/photo-1486870591958-9b9d0d1dda99?w=700&q=80&auto=format&fit=crop" alt="" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1501854140801-50d01698950b?w=700&q=80'"><span class="hbadge">Marzo 2026</span></div>
+      <div class="hbody"><div class="hname">Ruta 6 Mar</div><div class="hs"><div><div class="hsk">distancia</div><div class="hsv">10.5 km</div></div><div><div class="hsk">D+</div><div class="hsv">928 m</div></div><div><div class="hsk">tiempo</div><div class="hsv">~3h 30m</div></div><div><div class="hsk">dificultad</div><div class="hsv">ALTA</div></div></div>
+      <button class="hmap-btn" onclick="openMap('route_2026-03-06_1.37pm.gpx')">🗺 VER EN MAPA REAL</button></div>
+    </div>
+  </div>
+  <div class="footer rev"><div class="fbrand">JOTIQUE.</div><div class="finfo">Apple Health Export · 19 abr 2026<br>🏃 378 km · ⛰️ 12 rutas · ❤️ 34 ppm</div></div>
+</div>
+</div>
+
+<!-- ══ SLEEP ══ -->
+<div class="view" id="v-slp"><div class="wrap">
+  <div class="det-hero"><div class="det-ey">Análisis detallado</div><div class="det-title" style="color:var(--sleep)">SUEÑO &amp;<br>RECUPERACIÓN</div></div>
+  <div class="slp-stages rev">
+    <div class="stg s-d"><div class="stg-n"><span class="cnt" data-t="1" data-dec=".5">0</span>h</div><div class="stg-l">Sueño Profundo</div><div class="stg-s">Restauración física<br>Ideal: ≥1.5h</div></div>
+    <div class="stg s-r"><div class="stg-n"><span class="cnt" data-t="1" data-dec=".5">0</span>h</div><div class="stg-l">REM</div><div class="stg-s">Memoria &amp; aprendizaje<br>Ideal: ≥1.5h</div></div>
+    <div class="stg s-c"><div class="stg-n"><span class="cnt" data-t="3" data-dec=".6">0</span>h</div><div class="stg-l">Core</div><div class="stg-s">Sueño ligero-medio<br>Mayor parte del ciclo</div></div>
+    <div class="stg s-a"><div class="stg-n"><span class="cnt" data-t="6" data-dec=".8">0</span>h</div><div class="stg-l">Total en cama</div><div class="stg-s">Media 14 noches</div></div>
+  </div>
+  <div class="slp-ins rev">
+    <div class="si"><div class="si-n"><span class="cnt" data-t="6" data-dec=".8">0</span>h</div><div class="si-l">Promedio noche</div></div>
+    <div class="si"><div class="si-n" style="color:var(--run2)"><span class="cnt" data-t="9" data-dec=".5">0</span>h</div><div class="si-l">Máximo · 10 abr</div></div>
+    <div class="si"><div class="si-n" style="color:var(--heart)"><span class="cnt" data-t="3" data-dec=".3">0</span>h</div><div class="si-l">Mínimo · 6 abr</div></div>
+  </div>
+  <div class="card rev">
+    <div class="ct">Desglose noche por noche</div><div class="cs">6–19 Abril 2026</div>
+    <div class="slp-leg"><div class="ll"><div class="ld" style="background:var(--sleep)"></div>Profundo</div><div class="ll"><div class="ld" style="background:var(--run2)"></div>REM</div><div class="ll"><div class="ld" style="background:var(--mnt)"></div>Core</div><div class="ll"><div class="ld" style="background:rgba(255,255,255,.08)"></div>En cama</div></div>
+    <div class="slp-bars" id="slp-bars-det"></div>
+  </div>
+  <div class="card rev" style="margin-top:12px">
+    <div class="ct">HRV</div><div class="cs">Últimas 2 semanas · media 100ms</div>
+    <canvas id="hrv-c" style="width:100%;height:85px;display:block;margin-top:12px"></canvas>
+    <div style="display:flex;gap:18px;margin-top:10px;font-size:.67rem;color:var(--muted)"><span>Media: <strong style="color:var(--white)">100ms</strong></span><span>Máx: <strong style="color:var(--sleep)">117ms</strong></span><span>Mín: <strong style="color:var(--heart)">74ms</strong></span></div>
+  </div>
+</div></div>
+
+<!-- ══ RUNNING ══ -->
+<div class="view" id="v-run"><div class="wrap">
+  <div class="det-hero"><div class="det-ey">Análisis detallado</div><div class="det-title" style="color:var(--run)">RUNNING</div></div>
+  <div class="rkpis rev">
+    <div class="rkpi"><div class="rkpi-n"><span class="cnt" data-t="378">0</span> km</div><div class="rkpi-l">Total temporada</div></div>
+    <div class="rkpi"><div class="rkpi-n"><span class="cnt" data-t="50">0</span></div><div class="rkpi-l">Carreras</div></div>
+    <div class="rkpi"><div class="rkpi-n">4:31</div><div class="rkpi-l">Mejor ritmo /km</div></div>
+  </div>
+  <div class="rtable rev">
+    <div class="rrow rhead"><div class="rh">Fecha</div><div class="rh">Sesión</div><div class="rh">Dist.</div><div class="rh">Tiempo</div><div class="rh">Ritmo</div></div>
+    <div class="rrow"><div class="rdate">18 abr 26</div><div class="rname">Carrera</div><div class="rdist">4.1km</div><div class="rdur">38min</div><div class="rpace" style="color:var(--muted)">—</div></div>
+    <div class="rrow"><div class="rdate">16 abr 26</div><div class="rname">Carrera</div><div class="rdist">9.0km</div><div class="rdur">53min</div><div class="rpace">5:54/km</div></div>
+    <div class="rrow"><div class="rdate">14 abr 26</div><div class="rname">Carrera</div><div class="rdist">10.2km</div><div class="rdur">57min</div><div class="rpace">5:38/km</div></div>
+    <div class="rrow"><div class="rdate">12 abr 26</div><div class="rname">Carrera</div><div class="rdist">9.6km</div><div class="rdur">52min</div><div class="rpace">5:22/km</div></div>
+    <div class="rrow"><div class="rdate">10 abr 26</div><div class="rname">Long run</div><div class="rdist" style="color:var(--gold)">11.0km</div><div class="rdur">61min</div><div class="rpace">5:34/km</div></div>
+    <div class="rrow"><div class="rdate">5 abr 26</div><div class="rname">Carrera</div><div class="rdist">5.0km</div><div class="rdur">26min</div><div class="rpace">5:11/km</div></div>
+    <div class="rrow"><div class="rdate">3 abr 26</div><div class="rname">Carrera</div><div class="rdist">6.1km</div><div class="rdur">34min</div><div class="rpace">5:34/km</div></div>
+    <div class="rrow"><div class="rdate">10 mar 26</div><div class="rname">Carrera</div><div class="rdist">8.1km</div><div class="rdur">43min</div><div class="rpace">5:15/km</div></div>
+    <div class="rrow"><div class="rdate">6 mar 26</div><div class="rname">Long run</div><div class="rdist">10.1km</div><div class="rdur">52min</div><div class="rpace">5:12/km</div></div>
+    <div class="rrow"><div class="rdate">5 ene 26</div><div class="rname">Long run</div><div class="rdist" style="color:var(--gold)">12.6km 🏆</div><div class="rdur">61min</div><div class="rpace">4:52/km</div></div>
+    <div class="rrow"><div class="rdate">29 oct 25</div><div class="rname">Best pace</div><div class="rdist">5.0km</div><div class="rdur">23min</div><div class="rpace" style="color:var(--run)">4:31/km 🏆</div></div>
+  </div>
+  <div class="card rev" style="display:flex;align-items:center;gap:16px;padding:18px 22px">
+    <div style="font-size:2.5rem">👟</div>
+    <div><div style="font-family:var(--font);font-size:.9rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--orange)">Nike Vomero 18 — Blancas / Naranja</div><div style="font-size:.72rem;color:var(--muted);margin-top:3px">La zapatilla detrás de todos estos kilómetros. <strong style="color:var(--white2)">378 km acumulados</strong> — dentro del rango óptimo de vida útil (800 km).</div></div>
+  </div>
+</div></div>
+
+<!-- ══ HEART ══ -->
+<div class="view" id="v-hrt"><div class="wrap">
+  <div class="det-hero"><div class="det-ey">Análisis detallado</div><div class="det-title" style="color:var(--heart)">CORAZÓN &amp;<br>FRECUENCIA</div></div>
+  <div class="hrkpis rev">
+    <div class="hrkpi"><div class="hrkpi-n"><span class="cnt" data-t="34">0</span></div><div class="hrkpi-l">ppm mínima</div></div>
+    <div class="hrkpi"><div class="hrkpi-n"><span class="cnt" data-t="187">0</span></div><div class="hrkpi-l">ppm máxima</div></div>
+    <div class="hrkpi"><div class="hrkpi-n"><span class="cnt" data-t="100">0</span></div><div class="hrkpi-l">HRV media ms</div></div>
+    <div class="hrkpi"><div class="hrkpi-n">Z2</div><div class="hrkpi-l">Zona dominante</div></div>
+  </div>
+  <div class="card rev">
+    <div class="ct">FC media diaria</div><div class="cs">5–19 Abril · rojo=entreno · verde=descanso</div>
+    <div class="hr-bars">
+      <div class="hrb-col"><div class="hrb" style="height:79px;background:var(--heart);opacity:.8;transition-delay:0ms"></div><div class="hrb-l">5</div></div>
+      <div class="hrb-col"><div class="hrb" style="height:55px;background:var(--mnt);opacity:.7;transition-delay:50ms"></div><div class="hrb-l">6</div></div>
+      <div class="hrb-col"><div class="hrb" style="height:49px;background:var(--mnt);opacity:.7;transition-delay:100ms"></div><div class="hrb-l">7</div></div>
+      <div class="hrb-col"><div class="hrb" style="height:44px;background:var(--mnt);opacity:.8;transition-delay:150ms"></div><div class="hrb-l">8</div></div>
+      <div class="hrb-col"><div class="hrb" style="height:39px;background:var(--mnt);transition-delay:200ms"></div><div class="hrb-l">9</div></div>
+      <div class="hrb-col"><div class="hrb" style="height:83px;background:var(--heart);transition-delay:250ms"></div><div class="hrb-l">10</div></div>
+      <div class="hrb-col"><div class="hrb" style="height:38px;background:var(--mnt);transition-delay:300ms"></div><div class="hrb-l">11</div></div>
+      <div class="hrb-col"><div class="hrb" style="height:84px;background:var(--heart);transition-delay:350ms"></div><div class="hrb-l">12</div></div>
+      <div class="hrb-col"><div class="hrb" style="height:32px;background:var(--mnt);transition-delay:400ms"></div><div class="hrb-l">13</div></div>
+      <div class="hrb-col"><div class="hrb" style="height:90px;background:var(--heart);transition-delay:450ms"></div><div class="hrb-l">14</div></div>
+      <div class="hrb-col"><div class="hrb" style="height:48px;background:var(--muted);opacity:.6;transition-delay:500ms"></div><div class="hrb-l">15</div></div>
+      <div class="hrb-col"><div class="hrb" style="height:79px;background:var(--heart);opacity:.9;transition-delay:550ms"></div><div class="hrb-l">16</div></div>
+      <div class="hrb-col"><div class="hrb" style="height:41px;background:var(--mnt);transition-delay:600ms"></div><div class="hrb-l">17</div></div>
+      <div class="hrb-col"><div class="hrb" style="height:54px;background:var(--muted);opacity:.6;transition-delay:650ms"></div><div class="hrb-l">18</div></div>
+      <div class="hrb-col"><div class="hrb" style="height:31px;background:var(--mnt);transition-delay:700ms"></div><div class="hrb-l">19</div></div>
+    </div>
+    <div style="display:flex;gap:14px;margin-top:8px;font-size:.63rem;color:var(--muted)"><span style="color:var(--heart)">■</span><span>Entreno</span><span style="color:var(--mnt)">■</span><span>Descanso</span></div>
+  </div>
+  <div class="card rev" style="margin-top:12px">
+    <div class="ct">HRV</div><div class="cs">6–19 Abril</div>
+    <canvas id="hrv-c2" style="width:100%;height:85px;display:block;margin-top:12px"></canvas>
+    <div style="margin-top:12px;padding:10px 14px;background:rgba(255,45,85,.07);border-left:2px solid var(--heart);border-radius:2px;font-size:.7rem;color:var(--white2);line-height:1.7">FC reposo 34 ppm y HRV 100ms = nivel atleta de alto rendimiento. Con las Nike Vomero 18 como compañeras fieles, los números siguen mejorando.</div>
+  </div>
+</div></div>
+
+<!-- ══ MOUNTAIN ══ -->
+<div class="view" id="v-mnt"><div class="wrap">
+  <div class="det-hero"><div class="det-ey">Análisis detallado</div><div class="det-title" style="color:var(--mnt)">MONTAÑA &amp;<br>SENDERISMO</div></div>
+  <div class="mkpis rev">
+    <div class="mkpi"><div class="mkpi-n"><span class="cnt" data-t="88">0</span> km</div><div class="mkpi-l">km totales</div></div>
+    <div class="mkpi"><div class="mkpi-n"><span class="cnt" data-t="12">0</span></div><div class="mkpi-l">rutas registradas</div></div>
+    <div class="mkpi"><div class="mkpi-n">5.1k</div><div class="mkpi-l">D+ acumulado</div></div>
+  </div>
+  <div class="sh rev"><h2>Rutas con GPS</h2><span class="sh-tag">Pulsa 🗺 para ver el mapa</span><div class="sh-line"></div></div>
+  <div class="route-list rev">
+    <div class="ri"><div class="rinum">01</div><div><div class="ri-name">Ruta 8 Ene 2026</div><div class="ri-meta">9.6 km · D+ 876m · zona Alicante</div></div><div class="ri-stats"><div><div class="ri-sv">9.6km</div><div class="ri-sl">dist</div></div><div><div class="ri-sv">876m</div><div class="ri-sl">D+</div></div></div><button class="map-btn" onclick="openMap('route_2026-01-08_6.16pm.gpx')">🗺 MAPA</button></div>
+    <div class="ri"><div class="rinum">02</div><div><div class="ri-name">Ruta 10 Ene 2026</div><div class="ri-meta">6.9 km · D+ 609m</div></div><div class="ri-stats"><div><div class="ri-sv">6.9km</div><div class="ri-sl">dist</div></div><div><div class="ri-sv">609m</div><div class="ri-sl">D+</div></div></div><button class="map-btn" onclick="openMap('route_2026-01-10_8.49am.gpx')">🗺 MAPA</button></div>
+    <div class="ri"><div class="rinum">03</div><div><div class="ri-name">Ruta 13 Ene 2026</div><div class="ri-meta">11.0 km · D+ 896m</div></div><div class="ri-stats"><div><div class="ri-sv">11.0km</div><div class="ri-sl">dist</div></div><div><div class="ri-sv">896m</div><div class="ri-sl">D+</div></div></div><button class="map-btn" onclick="openMap('route_2026-01-13_11.07pm.gpx')">🗺 MAPA</button></div>
+    <div class="ri"><div class="rinum">04</div><div><div class="ri-name">Ruta 24 Ene 2026</div><div class="ri-meta">9.7 km · D+ 1023m — La más vertical</div></div><div class="ri-stats"><div><div class="ri-sv">9.7km</div><div class="ri-sl">dist</div></div><div><div class="ri-sv" style="color:var(--gold)">1023m 🏆</div><div class="ri-sl">D+</div></div></div><button class="map-btn" onclick="openMap('route_2026-01-24_10.57pm.gpx')">🗺 MAPA</button></div>
+    <div class="ri"><div class="rinum">05</div><div><div class="ri-name">Ruta 6 Mar 2026</div><div class="ri-meta">10.5 km · D+ 928m</div></div><div class="ri-stats"><div><div class="ri-sv">10.5km</div><div class="ri-sl">dist</div></div><div><div class="ri-sv">928m</div><div class="ri-sl">D+</div></div></div><button class="map-btn" onclick="openMap('route_2026-03-06_1.37pm.gpx')">🗺 MAPA</button></div>
+    <div class="ri"><div class="rinum">06</div><div><div class="ri-name">Ruta 14 Abr 2026</div><div class="ri-meta">10.5 km · D+ 868m</div></div><div class="ri-stats"><div><div class="ri-sv">10.5km</div><div class="ri-sl">dist</div></div><div><div class="ri-sv">868m</div><div class="ri-sl">D+</div></div></div><button class="map-btn" onclick="openMap('route_2026-04-14_10.00pm.gpx')">🗺 MAPA</button></div>
+    <div class="ri"><div class="rinum">07</div><div><div class="ri-name">Ruta 16 Abr 2026</div><div class="ri-meta">9.4 km · D+ 729m</div></div><div class="ri-stats"><div><div class="ri-sv">9.4km</div><div class="ri-sl">dist</div></div><div><div class="ri-sv">729m</div><div class="ri-sl">D+</div></div></div><button class="map-btn" onclick="openMap('route_2026-04-16_10.33pm.gpx')">🗺 MAPA</button></div>
+  </div>
+</div></div>
+
+<!-- ══ MAP MODAL ══ -->
+<div class="moverlay" id="map-modal">
+  <div class="mbox">
+    <div class="mhead">
+      <div class="m-title" id="m-title">RUTA</div>
+      <button class="m-close" onclick="closeMap()">✕ CERRAR</button>
+    </div>
+    <div class="mbody">
+      <div id="leafmap">
+        <!-- Layer toggle overlay -->
+        <div class="layer-toggle" id="ltog">
+          <button class="ltbtn active" id="lb-topo" onclick="setLayer('topo')">TOPO</button>
+          <button class="ltbtn" id="lb-sat" onclick="setLayer('sat')">SATÉLITE</button>
+          <button class="ltbtn" id="lb-osm" onclick="setLayer('osm')">MAPA</button>
+        </div>
+      </div>
+      <div class="elev-profile">
+        <div class="elev-title">Perfil de elevación</div>
+        <canvas id="elev-canvas"></canvas>
+      </div>
+    </div>
+    <div class="mstats" id="mstats"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+/* ── ROUTE DATA ── */const ROUTES={"route_2026-01-08_6.16pm.gpx":{"date":"8 Ene 2026","dist":9.6,"elev":876,"name":"Ruta 8 Ene 2026","center":[38.24512,-0.7983],"pts":[[38.24482,-0.79692,91.5],[38.24467,-0.79665,90.9],[38.24459,-0.79622,90.0],[38.24488,-0.79586,91.7],[38.24516,-0.79587,93.9],[38.2454,-0.79614,93.8],[38.24563,-0.79643,93.8],[38.24588,-0.79672,96.6],[38.24601,-0.79705,97.7],[38.24575,-0.79729,95.7],[38.24519,-0.79775,96.5],[38.24496,-0.79758,96.3],[38.2449,-0.79722,92.6],[38.24479,-0.79681,92.4],[38.24462,-0.79644,91.5],[38.2447,-0.79607,90.4],[38.24492,-0.79578,91.2],[38.24519,-0.79594,94.4],[38.24545,-0.79623,94.3],[38.24572,-0.79655,97.2],[38.24597,-0.79684,97.6],[38.24588,-0.79715,97.5],[38.24563,-0.79739,97.5],[38.24537,-0.79763,96.0],[38.24508,-0.79776,95.7],[38.24491,-0.79747,94.9],[38.2449,-0.79709,92.2],[38.24472,-0.7967,92.1],[38.24463,-0.79629,92.6],[38.24483,-0.79596,92.2],[38.24508,-0.79576,92.8],[38.2453,-0.79605,94.3],[38.24555,-0.79631,95.0],[38.24578,-0.79658,95.9],[38.24601,-0.79687,97.0],[38.24589,-0.79716,97.3],[38.24563,-0.79739,96.9],[38.24536,-0.79763,96.4],[38.24509,-0.79777,96.9],[38.24492,-0.79745,95.1],[38.2449,-0.79707,93.5],[38.24471,-0.79667,92.6],[38.24462,-0.79626,92.3],[38.24483,-0.79594,92.8],[38.24511,-0.79578,92.5],[38.24533,-0.79608,93.2],[38.24559,-0.79638,93.1],[38.24583,-0.79666,95.0],[38.24604,-0.79694,96.7],[38.24587,-0.79717,96.0],[38.24561,-0.79741,95.5],[38.24535,-0.79764,97.2],[38.24508,-0.79776,96.3],[38.24493,-0.79744,95.1],[38.24491,-0.79706,92.8],[38.24479,-0.79683,92.1],[38.24471,-0.79669,92.1],[38.24461,-0.79635,93.1],[38.24474,-0.79606,92.2],[38.24484,-0.79593,92.1],[38.245,-0.79576,91.6],[38.24544,-0.79616,94.2],[38.24581,-0.7966,97.9],[38.24598,-0.79709,97.4],[38.24555,-0.79748,94.8],[38.2451,-0.79778,97.4],[38.24492,-0.7973,94.9],[38.24474,-0.7967,92.5],[38.24462,-0.79636,91.8],[38.24466,-0.79619,92.5],[38.24475,-0.79605,91.3],[38.24483,-0.7959,91.8],[38.24494,-0.79576,91.8],[38.24515,-0.79586,88.4],[38.24565,-0.79645,97.1],[38.24599,-0.79689,97.7],[38.24576,-0.79728,101.0],[38.24535,-0.79764,99.3],[38.24495,-0.79761,96.4],[38.24487,-0.79694,93.4],[38.2446,-0.7964,92.2],[38.24472,-0.7961,90.9],[38.2448,-0.79595,91.4],[38.24488,-0.79583,92.1],[38.24499,-0.79574,92.3],[38.2451,-0.79583,92.0],[38.24548,-0.79623,91.3],[38.2459,-0.7967,94.4],[38.24584,-0.79718,98.5],[38.24545,-0.79756,98.4],[38.24504,-0.79772,96.0],[38.24492,-0.79713,92.7],[38.24468,-0.79662,90.7],[38.24468,-0.79614,90.7],[38.24477,-0.79603,92.0],[38.24485,-0.7959,93.4],[38.24494,-0.79578,92.5],[38.24504,-0.79578,92.9],[38.24522,-0.79595,93.6],[38.24562,-0.79637,91.9],[38.24601,-0.79687,98.7],[38.24576,-0.79728,100.7],[38.24533,-0.79768,100.5],[38.24494,-0.7975,96.2],[38.24482,-0.79688,93.3],[38.24461,-0.79629,92.1],[38.24479,-0.79599,90.7],[38.24488,-0.79586,91.7],[38.24498,-0.79574,91.9],[38.24504,-0.7958,93.0],[38.24511,-0.79583,94.7],[38.24501,-0.79573,92.8],[38.24517,-0.79591,93.1],[38.24552,-0.79625,94.0],[38.2459,-0.79672,97.0],[38.24587,-0.79714,95.7],[38.24548,-0.79755,98.5],[38.24505,-0.79778,97.7],[38.24492,-0.7972,96.0],[38.24468,-0.79663,92.2],[38.24468,-0.79611,90.1],[38.24477,-0.79602,91.7],[38.24486,-0.79589,91.7],[38.24494,-0.79578,92.7],[38.24504,-0.79577,94.1],[38.24517,-0.79591,93.5],[38.24557,-0.79636,96.1],[38.24592,-0.79676,98.0],[38.24583,-0.79719,97.3],[38.24546,-0.79758,96.5],[38.24498,-0.79769,96.7],[38.24491,-0.79707,95.4],[38.24462,-0.79651,93.0],[38.24468,-0.79614,92.5],[38.24478,-0.796,92.3],[38.24487,-0.79587,93.1],[38.24495,-0.79577,94.1],[38.24505,-0.79578,93.0],[38.24527,-0.79603,93.0],[38.24567,-0.79646,97.0],[38.24604,-0.79689,98.7],[38.24569,-0.79734,96.8],[38.2453,-0.79768,97.4],[38.24494,-0.79753,96.1],[38.24485,-0.79694,93.4],[38.2446,-0.79643,91.6],[38.24466,-0.79619,91.6],[38.24475,-0.79604,91.3],[38.24486,-0.79593,93.3],[38.24493,-0.79581,93.1],[38.24504,-0.7958,93.7],[38.24537,-0.79612,94.7],[38.24572,-0.79651,93.4],[38.24606,-0.79693,97.3],[38.24571,-0.79733,94.5],[38.24533,-0.79768,101.8],[38.24492,-0.79754,96.0],[38.24484,-0.79693,92.6],[38.2446,-0.79636,90.2],[38.24466,-0.79619,91.3],[38.24475,-0.79605,92.3],[38.24483,-0.79593,92.3],[38.24492,-0.79579,91.6],[38.24504,-0.79575,93.1],[38.24544,-0.79622,92.7],[38.24579,-0.79663,97.2],[38.24601,-0.79708,94.7],[38.24562,-0.79739,96.0],[38.24523,-0.79772,99.0],[38.24489,-0.79746,94.5],[38.24479,-0.79684,91.8],[38.2446,-0.7963,91.4],[38.24468,-0.79617,92.1],[38.24477,-0.79601,92.4],[38.24488,-0.79586,92.4],[38.24501,-0.79576,93.0],[38.24513,-0.79578,93.4],[38.24522,-0.79568,92.5],[38.24516,-0.7955,91.9],[38.24517,-0.79539,91.8],[38.24505,-0.79551,91.5],[38.24488,-0.79569,90.5],[38.24463,-0.79601,91.4],[38.24451,-0.79642,90.8],[38.24465,-0.79676,91.8],[38.24482,-0.79709,93.0],[38.24482,-0.79744,92.4],[38.24491,-0.79778,93.1],[38.24517,-0.7979,94.9],[38.24518,-0.79826,95.5],[38.24534,-0.79855,95.2],[38.24553,-0.7988,93.5],[38.24571,-0.7991,96.9],[38.24588,-0.7994,100.5],[38.24604,-0.7997,101.9],[38.24603,-0.80008,101.2],[38.24605,-0.80045,101.3],[38.2461,-0.80084,104.6],[38.24602,-0.80111,103.9],[38.24591,-0.80148,104.3],[38.24583,-0.8018,104.8],[38.24571,-0.80218,104.6],[38.2455,-0.80248,108.7],[38.24541,-0.80288,111.5],[38.24526,-0.80325,109.2],[38.24518,-0.80357,109.5],[38.24506,-0.80394,109.9],[38.24493,-0.80426,110.7],[38.24481,-0.80467,110.0],[38.24467,-0.80506,111.7],[38.24456,-0.80545,111.7],[38.24446,-0.80589,112.8],[38.2444,-0.80625,112.4],[38.24426,-0.80665,112.3],[38.2442,-0.80705,109.1],[38.24419,-0.80747,108.3],[38.2441,-0.80789,111.4],[38.24401,-0.80827,112.0],[38.24391,-0.80862,114.9],[38.24415,-0.80891,113.1],[38.24444,-0.80916,113.9],[38.24473,-0.80936,115.6],[38.24484,-0.80945,116.6],[38.24511,-0.80966,113.6],[38.24493,-0.8103,114.0],[38.24472,-0.81064,113.5],[38.24457,-0.81104,111.0],[38.24457,-0.81151,112.7],[38.24448,-0.81192,112.4],[38.24439,-0.81234,115.3],[38.2446,-0.81258,113.2],[38.24489,-0.81263,117.4],[38.24521,-0.81272,117.7],[38.24515,-0.81311,119.8],[38.24518,-0.81342,122.1]]},"route_2026-01-10_8.49am.gpx":{"date":"10 Ene 2026","dist":6.9,"elev":609,"name":"Ruta 10 Ene 2026","center":[38.24784,-0.81379],"pts":[[38.2454,-0.81435,116.8],[38.24514,-0.81424,115.4],[38.24457,-0.814,112.9],[38.24393,-0.81354,114.9],[38.2438,-0.81313,112.9],[38.24334,-0.81307,111.3],[38.24318,-0.81339,109.4],[38.24283,-0.81339,109.4],[38.24244,-0.81321,106.6],[38.24252,-0.81268,109.5],[38.24208,-0.81232,110.5],[38.24163,-0.81223,109.4],[38.24143,-0.81278,106.4],[38.24109,-0.81293,102.0],[38.24062,-0.81287,102.4],[38.24023,-0.81276,107.1],[38.24065,-0.8124,105.2],[38.24101,-0.81229,105.0],[38.24143,-0.81232,109.8],[38.24186,-0.81236,110.6],[38.24251,-0.8124,109.3],[38.24289,-0.81232,111.7],[38.24329,-0.81231,113.2],[38.24387,-0.81234,113.8],[38.24397,-0.81295,114.0],[38.24406,-0.81364,115.1],[38.24450,-0.81378,118.8],[38.24489,-0.81394,122.6],[38.24519,-0.81353,122.3],[38.24585,-0.81364,128.7],[38.24623,-0.81372,132.9],[38.24673,-0.81364,133.2],[38.24681,-0.81336,130.2],[38.24711,-0.81314,129.2],[38.24752,-0.81337,133.3],[38.24785,-0.81325,136.6],[38.248,-0.813,134.6],[38.24857,-0.8131,137.4],[38.24914,-0.81329,139.3],[38.24953,-0.81342,139.9],[38.24995,-0.81355,140.0],[38.25052,-0.81391,144.3],[38.25079,-0.81427,147.1],[38.25127,-0.81478,150.6],[38.2518,-0.81523,155.4],[38.252,-0.81538,155.1],[38.25218,-0.81541,154.6],[38.25183,-0.81476,149.8],[38.25132,-0.8142,146.5],[38.2508,-0.8137,145.8],[38.25034,-0.81305,142.1],[38.25059,-0.81253,132.7],[38.25095,-0.81276,129.7],[38.25125,-0.8132,131.8],[38.25173,-0.81381,134.3],[38.25229,-0.81425,135.0],[38.25282,-0.81478,133.5],[38.25326,-0.81538,137.2],[38.2535,-0.81579,137.9],[38.25393,-0.81651,137.0],[38.25419,-0.81692,142.3],[38.25378,-0.81625,138.3],[38.2532,-0.81535,137.1],[38.25263,-0.81458,134.4],[38.25188,-0.81394,135.1],[38.25083,-0.81247,132.3],[38.25057,-0.81264,135.6],[38.25035,-0.81304,142.7],[38.25085,-0.81379,144.7],[38.25133,-0.81435,147.2],[38.25165,-0.8147,149.2],[38.25212,-0.8152,154.3],[38.25218,-0.81539,156.7],[38.25176,-0.81515,158.3],[38.2514,-0.81484,151.8],[38.25073,-0.81406,146.9],[38.25012,-0.8144,146.4],[38.2494,-0.81449,142.5],[38.2492,-0.81449,139.0],[38.24872,-0.81431,137.8],[38.24821,-0.81437,135.5],[38.2475,-0.81436,132.2],[38.24689,-0.8144,130.2],[38.24630,-0.81402,133.2],[38.24560,-0.81397,128.4],[38.24493,-0.81385,124.8],[38.24428,-0.8137,117.5],[38.24392,-0.81358,116.7],[38.244,-0.81261,113.2],[38.24438,-0.81258,115.3],[38.24488,-0.81268,120.9],[38.24512,-0.81269,122.1],[38.24528,-0.81311,121.9],[38.24595,-0.81327,128.4],[38.24639,-0.81337,128.0],[38.2469,-0.81301,128.3],[38.24731,-0.81324,131.7],[38.24788,-0.81322,135.2],[38.2481,-0.81299,134.6],[38.24881,-0.81321,137.2],[38.24923,-0.81334,141.7],[38.24919,-0.81377,143.4],[38.24922,-0.8143,139.4],[38.24878,-0.8143,136.9],[38.24828,-0.81436,135.9],[38.24781,-0.81433,132.9],[38.24707,-0.81454,131.3],[38.24628,-0.81404,131.0],[38.24581,-0.81405,127.3]]},"route_2026-01-13_11.07pm.gpx":{"date":"13 Ene 2026","dist":11.0,"elev":896,"name":"Ruta 13 Ene 2026","center":[38.27415,-0.685],"pts":[[38.2709,-0.67172,83.8],[38.27032,-0.67085,82.1],[38.27095,-0.6707,84.1],[38.27197,-0.67071,84.8],[38.27231,-0.67041,87.3],[38.27291,-0.6709,86.7],[38.27348,-0.67137,88.8],[38.274,-0.67185,88.6],[38.27436,-0.67251,89.2],[38.27463,-0.6732,93.3],[38.27472,-0.67404,95.2],[38.2749,-0.67477,94.3],[38.27506,-0.67552,95.5],[38.27546,-0.67593,93.3],[38.27562,-0.67556,93.7],[38.2755,-0.67544,95.7],[38.27548,-0.6763,94.8],[38.27558,-0.67669,96.9],[38.27631,-0.67711,96.6],[38.27716,-0.67741,96.9],[38.27774,-0.67748,97.8],[38.27803,-0.67759,98.8],[38.27811,-0.67842,99.0],[38.27801,-0.67929,96.4],[38.27789,-0.68011,96.2],[38.27798,-0.68092,99.4],[38.27822,-0.68166,101.5],[38.27763,-0.68276,99.1],[38.27741,-0.68418,96.2],[38.27723,-0.68502,94.8],[38.27698,-0.68635,95.9],[38.27657,-0.68782,94.0],[38.27637,-0.68911,95.9],[38.27629,-0.69083,95.3],[38.27594,-0.69207,94.7],[38.27557,-0.69335,96.7],[38.27536,-0.69549,95.7],[38.27634,-0.69584,95.5],[38.27674,-0.6936,95.5],[38.27709,-0.69144,93.6],[38.27725,-0.69015,95.7],[38.27752,-0.68884,96.0],[38.27772,-0.68798,95.3],[38.27811,-0.68736,94.7],[38.27888,-0.68642,99.0],[38.27938,-0.68496,97.0],[38.28045,-0.68415,98.8],[38.28104,-0.68356,101.4],[38.28157,-0.68296,103.2],[38.28054,-0.68279,100.3],[38.27958,-0.68241,98.3],[38.27883,-0.68211,98.3],[38.27808,-0.6818,97.9],[38.2774,-0.68153,96.4],[38.27667,-0.68118,93.0],[38.27527,-0.68061,91.1],[38.27465,-0.6812,94.3],[38.27425,-0.68361,90.8],[38.274,-0.68498,92.1],[38.27362,-0.68737,92.1],[38.27321,-0.68986,95.9],[38.27313,-0.69075,90.6],[38.27263,-0.69302,91.6],[38.27242,-0.6944,92.9],[38.27212,-0.6961,93.0],[38.2717,-0.698,91.5],[38.27135,-0.70003,82.1],[38.27108,-0.70039,87.4],[38.27162,-0.69755,89.8],[38.27108,-0.6964,89.0],[38.27003,-0.69654,87.0],[38.26843,-0.69635,83.6],[38.26828,-0.695,83.2],[38.26898,-0.69305,85.2],[38.26905,-0.69234,86.9],[38.26927,-0.69034,85.5],[38.26993,-0.68309,85.6],[38.27032,-0.68188,88.1],[38.27087,-0.67996,88.0],[38.27102,-0.67712,86.7],[38.27136,-0.67587,86.5],[38.27169,-0.67361,87.2],[38.27133,-0.67224,88.4]]}, "route_2026-01-24_10.57pm.gpx":{"date":"24 Ene 2026","dist":9.7,"elev":1023,"name":"Ruta 24 Ene 2026","center":[38.27541,-0.68974],"pts":[[38.27376,-0.67203,86.8],[38.2741,-0.67299,89.4],[38.27439,-0.67401,91.1],[38.27463,-0.6751,93.1],[38.2749,-0.67622,93.3],[38.27486,-0.67737,96.9],[38.27457,-0.67879,91.3],[38.27433,-0.68023,93.9],[38.27477,-0.68044,95.1],[38.27562,-0.68082,96.3],[38.27648,-0.68116,95.4],[38.27706,-0.68139,95.7],[38.27767,-0.682,96.6],[38.27751,-0.68315,96.5],[38.27741,-0.68388,93.9],[38.27722,-0.68495,92.5],[38.27699,-0.6864,92.1],[38.27677,-0.68713,93.1],[38.27655,-0.6878,94.7],[38.27641,-0.68885,94.3],[38.27629,-0.6907,94.6],[38.2762,-0.69119,99.5],[38.27564,-0.69307,97.3],[38.27539,-0.69497,93.9],[38.27581,-0.69575,98.0],[38.27638,-0.69561,98.3],[38.27695,-0.69219,94.1],[38.27712,-0.69067,97.3],[38.27734,-0.68971,95.4],[38.27762,-0.68826,95.1],[38.27847,-0.68694,95.1],[38.27949,-0.68688,99.4],[38.27977,-0.68765,108.4],[38.28034,-0.68886,103.0],[38.28076,-0.69005,106.4],[38.28026,-0.69143,106.0],[38.27985,-0.69295,103.7],[38.2797,-0.69497,102.7],[38.27967,-0.6958,103.4],[38.27929,-0.69661,104.7],[38.27958,-0.6979,106.2],[38.27944,-0.69978,104.6],[38.27931,-0.70135,98.0],[38.27916,-0.70301,110.4],[38.27872,-0.70442,112.8],[38.27828,-0.70566,111.8],[38.27782,-0.70689,112.1],[38.27721,-0.70624,109.3],[38.27657,-0.70511,106.1],[38.276,-0.70418,102.1],[38.27516,-0.70319,98.5],[38.27432,-0.70268,94.5],[38.27340,-0.7023,92.6],[38.27191,-0.70207,91.9],[38.27118,-0.70194,88.4],[38.27122,-0.69985,85.2],[38.27143,-0.69859,88.6],[38.2716,-0.69733,89.9],[38.27183,-0.69578,88.6],[38.27224,-0.6931,89.2],[38.27268,-0.69036,90.5],[38.27296,-0.6889,88.6],[38.27338,-0.68627,87.7],[38.27371,-0.68446,88.5],[38.27401,-0.68256,88.7],[38.27413,-0.6814,90.6],[38.27428,-0.68063,91.5],[38.27409,-0.68005,91.6],[38.27199,-0.67925,88.6],[38.2712,-0.67891,86.7],[38.27163,-0.67377,86.1],[38.27133,-0.67224,88.4]]},"route_2026-03-06_1.37pm.gpx":{"date":"6 Mar 2026","dist":10.5,"elev":928,"name":"Ruta 6 Mar 2026","center":[38.26987,-0.70613],"pts":[[38.2776,-0.71854,128.6],[38.2768,-0.71896,128.9],[38.27499,-0.72012,123.8],[38.27523,-0.71843,122.9],[38.27583,-0.71735,124.0],[38.27573,-0.71672,121.7],[38.2748,-0.71674,122.3],[38.27456,-0.7186,120.6],[38.27354,-0.71753,115.1],[38.27264,-0.71731,116.3],[38.27161,-0.71756,113.7],[38.27099,-0.71766,111.3],[38.2691,-0.71707,106.1],[38.26847,-0.71606,104.2],[38.26762,-0.71476,94.2],[38.267,-0.71381,93.3],[38.26635,-0.71247,91.3],[38.2647,-0.71116,85.8],[38.26444,-0.70912,84.2],[38.26432,-0.70564,80.0],[38.26292,-0.70241,77.8],[38.26305,-0.70154,77.3],[38.26339,-0.69986,74.6],[38.26332,-0.69905,77.7],[38.26256,-0.69898,75.2],[38.26284,-0.69952,67.6],[38.26343,-0.69979,68.0],[38.26447,-0.69992,66.7],[38.26514,-0.69992,67.5],[38.26619,-0.6996,69.7],[38.26718,-0.69954,70.7],[38.26849,-0.69959,68.3],[38.26953,-0.69951,70.2],[38.27058,-0.69935,70.5],[38.27155,-0.69942,72.8],[38.27202,-0.70038,76.5],[38.27177,-0.7012,89.9],[38.27145,-0.69935,82.5],[38.27161,-0.69852,90.5],[38.27201,-0.69681,91.2],[38.27219,-0.69591,91.1],[38.2725,-0.69474,91.0],[38.27273,-0.69257,92.1],[38.27300,-0.69114,94.5],[38.27328,-0.68941,89.6],[38.27366,-0.68836,90.0],[38.2743,-0.68849,89.4],[38.27411,-0.68983,94.2],[38.27395,-0.69156,92.0],[38.27273,-0.69231,91.6],[38.27247,-0.69401,90.1],[38.27201,-0.69671,90.6],[38.27164,-0.69821,91.6],[38.27139,-0.69964,79.4],[38.27129,-0.70052,86.2],[38.2709,-0.70217,90.0],[38.26958,-0.706,96.4],[38.26741,-0.70956,88.5],[38.26832,-0.71146,94.9],[38.26787,-0.71252,94.8],[38.26855,-0.71438,98.8],[38.26976,-0.71615,106.7],[38.27058,-0.71732,111.8],[38.27171,-0.71733,115.5],[38.27284,-0.71709,115.8],[38.27359,-0.717,119.0]]},"route_2026-04-14_10.00pm.gpx":{"date":"14 Abr 2026","dist":10.5,"elev":868,"name":"Ruta 14 Abr 2026","center":[38.27648,-0.68448],"pts":[[38.27077,-0.67158,83.2],[38.2704,-0.67068,82.3],[38.271,-0.67072,85.0],[38.27172,-0.67099,87.0],[38.2732,-0.67162,89.1],[38.274,-0.67245,86.6],[38.27412,-0.6733,92.4],[38.27451,-0.67455,92.8],[38.27481,-0.67583,93.2],[38.27512,-0.67583,94.6],[38.27576,-0.6748,96.1],[38.27588,-0.67394,93.4],[38.2762,-0.67224,95.8],[38.27676,-0.6716,96.7],[38.27742,-0.67174,95.9],[38.27835,-0.67197,96.8],[38.27806,-0.67361,95.5],[38.27777,-0.67529,96.5],[38.27751,-0.67696,96.0],[38.27710,-0.67973,95.7],[38.27706,-0.68082,95.1],[38.27761,-0.6818,98.6],[38.2775,-0.68348,96.6],[38.27728,-0.68464,94.5],[38.27699,-0.6864,95.1],[38.27636,-0.68908,97.0],[38.27621,-0.69132,95.5],[38.27556,-0.69403,96.7],[38.2754,-0.6949,94.1],[38.27627,-0.69585,96.7],[38.27677,-0.69332,97.2],[38.27726,-0.69006,97.6],[38.27779,-0.68741,96.7],[38.27828,-0.68444,96.9],[38.27884,-0.68407,104.0],[38.27955,-0.68448,102.0],[38.27908,-0.68605,100.5],[38.27819,-0.68727,99.5],[38.27765,-0.6881,99.1],[38.27749,-0.68889,96.5],[38.27735,-0.6898,97.5],[38.27712,-0.69075,98.9],[38.27698,-0.69199,100.4],[38.27779,-0.69284,99.1],[38.27857,-0.69348,101.3],[38.27889,-0.69264,100.7],[38.27924,-0.69077,104.4],[38.27944,-0.68955,106.4],[38.27969,-0.68855,101.0],[38.27936,-0.69029,103.1],[38.27917,-0.69147,103.6],[38.27874,-0.69385,102.3],[38.27844,-0.69568,101.2],[38.27715,-0.69593,96.3],[38.27641,-0.6956,95.1],[38.27673,-0.6938,96.8],[38.27712,-0.69087,96.4],[38.27749,-0.6892,98.5],[38.27798,-0.6861,95.3],[38.27828,-0.68454,96.0],[38.27785,-0.684,95.7],[38.27764,-0.68235,96.3],[38.27724,-0.68139,96.3],[38.27623,-0.68101,94.3],[38.27519,-0.68059,93.8],[38.27432,-0.68013,92.8],[38.27369,-0.67991,91.9],[38.27199,-0.67928,87.3],[38.2708,-0.6784,84.0],[38.27115,-0.67582,87.7],[38.27147,-0.67461,90.4]]},"route_2026-04-16_10.33pm.gpx":{"date":"16 Abr 2026","dist":9.4,"elev":729,"name":"Ruta 16 Abr 2026","center":[38.26875,-0.67639],"pts":[[38.26942,-0.6705,80.4],[38.26887,-0.67042,79.8],[38.26817,-0.66888,80.0],[38.26809,-0.66798,81.1],[38.26826,-0.6661,78.5],[38.26812,-0.6648,78.4],[38.26708,-0.66465,78.5],[38.2656,-0.66188,76.4],[38.26417,-0.66048,73.9],[38.2629,-0.66107,72.7],[38.26255,-0.66165,72.8],[38.26267,-0.66271,69.6],[38.26301,-0.66372,69.3],[38.26326,-0.66445,70.4],[38.26355,-0.66549,70.8],[38.26381,-0.66616,73.4],[38.26441,-0.66612,75.8],[38.26398,-0.6667,75.1],[38.26441,-0.66765,72.4],[38.26492,-0.66799,73.6],[38.26584,-0.66825,75.8],[38.26676,-0.66858,79.4],[38.26737,-0.66873,79.3],[38.26828,-0.66901,80.5],[38.26936,-0.66949,81.9],[38.2699,-0.66983,82.7],[38.27059,-0.67008,83.6],[38.2711,-0.67026,85.5],[38.27179,-0.67049,87.5],[38.27203,-0.67107,87.9],[38.2723,-0.67169,90.5],[38.27194,-0.67338,88.8],[38.27151,-0.67508,87.9],[38.27118,-0.67631,87.8],[38.27099,-0.67705,87.1],[38.27057,-0.67843,84.7],[38.27035,-0.6794,86.1],[38.27008,-0.6805,84.5],[38.2696,-0.68194,85.3],[38.26946,-0.6831,84.2],[38.26902,-0.68418,82.3],[38.26873,-0.68518,83.0],[38.2684,-0.68673,83.1],[38.2681,-0.68788,82.1],[38.2677,-0.68998,85.0],[38.26732,-0.69148,86.5],[38.26694,-0.69299,84.4],[38.26679,-0.6936,83.2],[38.26693,-0.69364,84.1],[38.26796,-0.69393,85.9],[38.26861,-0.69397,85.8],[38.26679,-0.69339,85.4],[38.26684,-0.69259,82.5],[38.26732,-0.69089,85.0],[38.26803,-0.68899,84.9],[38.26844,-0.68708,85.0],[38.26876,-0.6857,82.9],[38.26918,-0.68397,83.0],[38.26952,-0.68286,86.3],[38.26984,-0.6814,87.2],[38.27066,-0.67994,85.7],[38.27259,-0.68051,90.6],[38.2731,-0.68134,90.8],[38.27415,-0.68176,93.9],[38.27448,-0.68025,94.9],[38.27459,-0.6788,93.8],[38.27492,-0.6773,96.7],[38.27418,-0.67665,93.6],[38.27248,-0.67691,89.5],[38.27128,-0.6769,88.1],[38.27148,-0.67543,89.7],[38.27168,-0.67365,88.2]]}};
+
+/* CURSOR */
+const cur=document.getElementById('cur'),curR=document.getElementById('curR');
+let mx=0,my=0,rx=0,ry=0;
+document.addEventListener('mousemove',e=>{mx=e.clientX;my=e.clientY;});
+document.addEventListener('mouseover',e=>{if(e.target.matches('a,button,[onclick],[tabindex]'))document.body.classList.add('hov');else document.body.classList.remove('hov');});
+(function t(){cur.style.left=mx+'px';cur.style.top=my+'px';rx+=(mx-rx)*.13;ry+=(my-ry)*.13;curR.style.left=rx+'px';curR.style.top=ry+'px';requestAnimationFrame(t);})();
+
+/* VIEWS */
+let CV='v-main';
+function show(id){
+  document.getElementById(CV).classList.remove('active');
+  document.getElementById(id).classList.add('active');
+  CV=id; window.scrollTo({top:0,behavior:'smooth'});
+  document.getElementById('nbk').style.display='flex';
+  setTimeout(()=>{
+    document.getElementById(id).querySelectorAll('.rev').forEach(el=>io.observe(el));
+    document.getElementById(id).querySelectorAll('.cnt').forEach(el=>{if(!el.dataset.done){el.dataset.done='1';animCnt(el);}});
+    document.getElementById(id).querySelectorAll('.cp').forEach(p=>setTimeout(()=>p.classList.add('draw'),200));
+    document.getElementById(id).querySelectorAll('.ca').forEach(p=>setTimeout(()=>p.classList.add('draw'),200));
+    if(id==='v-slp'){buildSlpBars();drawHRV('hrv-c');}
+    if(id==='v-hrt'){drawHRV('hrv-c2');}
+  },60);
+}
+function goHome(){
+  document.getElementById(CV).classList.remove('active');
+  document.getElementById('v-main').classList.add('active');
+  CV='v-main'; window.scrollTo({top:0,behavior:'smooth'});
+  document.getElementById('nbk').style.display='none';
+}
+
+/* REVEAL */
+const io=new IntersectionObserver(entries=>{
+  entries.forEach(e=>{
+    if(!e.isIntersecting)return;
+    e.target.classList.add('vis');
+    e.target.querySelectorAll('.ba').forEach((b,i)=>setTimeout(()=>b.classList.add('grow'),i*60+80));
+    e.target.querySelectorAll('.zf').forEach((z,i)=>setTimeout(()=>z.classList.add('grow'),i*100+150));
+    e.target.querySelectorAll('.hrb').forEach(b=>setTimeout(()=>b.classList.add('grow'),80));
+    e.target.querySelectorAll('.slb-seg').forEach(s=>setTimeout(()=>s.classList.add('grow'),80));
+    e.target.querySelectorAll('.vom-bf').forEach(f=>setTimeout(()=>f.classList.add('grow'),300));
+    if(e.target.querySelector('.cp'))setTimeout(()=>{e.target.querySelectorAll('.cp').forEach(p=>p.classList.add('draw'));e.target.querySelectorAll('.ca').forEach(p=>p.classList.add('draw'));},250);
+  });
+},{threshold:.1});
+document.querySelectorAll('.rev').forEach(el=>io.observe(el));
+
+/* COUNTER */
+function animCnt(el){
+  const t=+el.dataset.t,dec=el.dataset.dec||'',dur=1500,t0=performance.now();
+  (function s(now){const p=Math.min((now-t0)/dur,1),e=1-Math.pow(1-p,3);el.textContent=Math.round(e*t).toLocaleString('es-ES')+dec;if(p<1)requestAnimationFrame(s);else el.textContent=t.toLocaleString('es-ES')+dec;})(t0);
+}
+document.querySelectorAll('.cnt').forEach(el=>{
+  const o=new IntersectionObserver(en=>{en.forEach(e=>{if(e.isIntersecting&&!e.target.dataset.done){e.target.dataset.done='1';animCnt(e.target);}});},{threshold:.5});
+  o.observe(el);
+});
+
+/* SLEEP BARS */
+function buildSlpBars(){
+  const n=[{d:'6',tot:3.3,deep:.9,rem:.6,core:1.8},{d:'7',tot:7.1,deep:1.4,rem:1.7,core:4.1},{d:'8',tot:7.2,deep:1.4,rem:1.8,core:3.9},{d:'9',tot:7.7,deep:2.0,rem:2.1,core:3.6},{d:'10',tot:9.5,deep:1.9,rem:2.3,core:5.3},{d:'11',tot:6.2,deep:1.5,rem:1.1,core:3.6},{d:'12',tot:5.2,deep:1.0,rem:.8,core:3.4},{d:'13',tot:8.0,deep:1.7,rem:1.6,core:4.7},{d:'14',tot:5.2,deep:.9,rem:1.2,core:3.1},{d:'15',tot:6.6,deep:.9,rem:1.4,core:4.2},{d:'16',tot:7.7,deep:2.7,rem:1.7,core:3.3},{d:'17',tot:6.0,deep:1.4,rem:1.5,core:3.1},{d:'18',tot:7.5,deep:2.2,rem:2.5,core:2.9},{d:'19',tot:5.3,deep:1.1,rem:1.6,core:2.6}];
+  const mx=9.5,H=95,c=document.getElementById('slp-bars-det');
+  if(!c||c.children.length>0)return;
+  c.innerHTML=n.map((x,i)=>{const sc=v=>Math.round((v/mx)*H);return`<div class="slb-col"><div class="slb-st"><div class="slb-seg" style="height:${sc(x.deep)}px;background:var(--sleep);transition-delay:${i*40}ms"></div><div class="slb-seg" style="height:${sc(x.rem)}px;background:var(--run2);transition-delay:${i*40+80}ms"></div><div class="slb-seg" style="height:${sc(x.core)}px;background:var(--mnt);transition-delay:${i*40+160}ms"></div><div class="slb-seg" style="height:${sc(Math.max(0,x.tot-x.deep-x.rem-x.core))}px;background:rgba(255,255,255,.06);transition-delay:${i*40+240}ms"></div></div><div class="slb-dl">${x.d}</div></div>`;}).join('');
+  setTimeout(()=>c.querySelectorAll('.slb-seg').forEach(s=>s.classList.add('grow')),100);
+}
+
+/* HRV */
+const HRV=[100.6,98.9,106.5,87.7,108.1,100.4,102.1,102.4,117.4,84.4,74.3,99.2,117.0,82.6];
+function drawHRV(id){
+  const cv=document.getElementById(id);
+  if(!cv||cv._drawn)return; cv._drawn=true;
+  const dpr=window.devicePixelRatio||1,W=cv.offsetWidth||400,H=85;
+  cv.width=W*dpr;cv.height=H*dpr;
+  const c=cv.getContext('2d');c.scale(dpr,dpr);
+  const mn=60,mx=125,pts=HRV.map((v,i)=>({x:(i/(HRV.length-1))*(W-16)+8,y:H-8-((v-mn)/(mx-mn))*(H-18)}));
+  const g=c.createLinearGradient(0,0,0,H);g.addColorStop(0,'rgba(94,159,255,.18)');g.addColorStop(1,'rgba(94,159,255,0)');
+  c.beginPath();c.moveTo(pts[0].x,pts[0].y);
+  for(let i=1;i<pts.length;i++){const cx=(pts[i-1].x+pts[i].x)/2;c.bezierCurveTo(cx,pts[i-1].y,cx,pts[i].y,pts[i].x,pts[i].y);}
+  c.lineTo(pts[pts.length-1].x,H);c.lineTo(pts[0].x,H);c.closePath();c.fillStyle=g;c.fill();
+  c.beginPath();c.moveTo(pts[0].x,pts[0].y);
+  for(let i=1;i<pts.length;i++){const cx=(pts[i-1].x+pts[i].x)/2;c.bezierCurveTo(cx,pts[i-1].y,cx,pts[i].y,pts[i].x,pts[i].y);}
+  c.strokeStyle='#5e9fff';c.lineWidth=2;c.stroke();
+  pts.forEach((p,i)=>{if(HRV[i]===117.4||HRV[i]===74.3||HRV[i]===117.0){c.beginPath();c.arc(p.x,p.y,3.5,0,Math.PI*2);c.fillStyle=HRV[i]<90?'#ff2d55':'#5e9fff';c.fill();c.strokeStyle='#111';c.lineWidth=1.2;c.stroke();}});
+  const rY=H-8-((100-mn)/(mx-mn))*(H-18);
+  c.setLineDash([3,4]);c.beginPath();c.moveTo(8,rY);c.lineTo(W-8,rY);c.strokeStyle='rgba(94,159,255,.25)';c.lineWidth=1;c.stroke();c.setLineDash([]);
+  c.font='8px Barlow Condensed';c.fillStyle='rgba(94,159,255,.5)';c.fillText('100ms avg',W-55,rY-3);
+}
+window.addEventListener('load',()=>{setTimeout(()=>{document.querySelectorAll('#v-main .cp').forEach(p=>p.classList.add('draw'));document.querySelectorAll('#v-main .ca').forEach(p=>p.classList.add('draw'));},400);});
+
+/* ══ LEAFLET MAP ══ */
+let leafMap=null, currentLayer=null, routeLayer=null, markerGroup=null;
+let layers={};
+
+function openMap(routeKey){
+  const r=ROUTES[routeKey];
+  const modal=document.getElementById('map-modal');
+  document.getElementById('m-title').textContent=r.name+' · '+r.dist+'km · D+'+r.elev+'m';
+  document.getElementById('mstats').innerHTML=
+    `<div><div class="ms-v">${r.dist}km</div><div class="ms-l">Distancia</div></div>
+     <div><div class="ms-v">D+${r.elev}m</div><div class="ms-l">Desnivel</div></div>
+     <div><div class="ms-v">${r.date}</div><div class="ms-l">Fecha</div></div>
+     <div style="font-size:.62rem;color:var(--muted);margin-left:auto;align-self:center">Arrastra · Zoom con rueda</div>`;
+  modal.classList.add('open');
+  setTimeout(()=>initLeaflet(routeKey),80);
+}
+
+function initLeaflet(routeKey){
+  const r=ROUTES[routeKey];
+  const mapEl=document.getElementById('leafmap');
+  // Destroy previous map
+  if(leafMap){leafMap.remove();leafMap=null;}
+  // Init
+  leafMap=L.map('leafmap',{zoomControl:true,attributionControl:true});
+  // Define tile layers
+  layers.topo=L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,attribution:'© OpenTopoMap'});
+  layers.sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,attribution:'© Esri World Imagery'});
+  layers.osm=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
+  // Default: topo
+  layers.topo.addTo(leafMap);
+  currentLayer='topo';
+  // Build latlng array
+  const latlngs=r.pts.map(p=>[p[0],p[1]]);
+  const eles=r.pts.map(p=>p[2]);
+  // Elevation-colored polyline: split into segments
+  for(let i=0;i<latlngs.length-1;i++){
+    const t=(eles[i]-Math.min(...eles))/(Math.max(...eles)-Math.min(...eles));
+    const R=Math.round(t*255);
+    const G=Math.round((1-t)*200);
+    const B=Math.round((1-t)*80);
+    L.polyline([latlngs[i],latlngs[i+1]],{color:`rgb(${R},${G},${B})`,weight:4,opacity:.9}).addTo(leafMap);
+  }
+  // Glow polyline
+  L.polyline(latlngs,{color:'#00c896',weight:8,opacity:.18}).addTo(leafMap);
+  // Main route
+  L.polyline(latlngs,{color:'#00e8af',weight:3,opacity:.7,dashArray:'none'}).addTo(leafMap);
+  // Start marker
+  const startIcon=L.divIcon({className:'',html:'<div style="background:#00c896;width:14px;height:14px;border-radius:50%;border:3px solid white;box-shadow:0 0 10px #00c896"></div>',iconSize:[14,14],iconAnchor:[7,7]});
+  const endIcon=L.divIcon({className:'',html:'<div style="background:#ff4500;width:14px;height:14px;border-radius:50%;border:3px solid white;box-shadow:0 0 10px #ff4500"></div>',iconSize:[14,14],iconAnchor:[7,7]});
+  const peakIcon=L.divIcon({className:'',html:'<div style="background:#ffd700;color:#000;font-weight:800;font-size:9px;padding:2px 5px;border-radius:2px;white-space:nowrap;font-family:Barlow Condensed,sans-serif;letter-spacing:.05em;">▲ '+Math.round(Math.max(...eles))+'m</div>',iconSize:[null,null],iconAnchor:[0,10]});
+  L.marker(latlngs[0],{icon:startIcon}).addTo(leafMap).bindPopup('<b style="font-family:Barlow Condensed;font-size:13px">INICIO</b>');
+  L.marker(latlngs[latlngs.length-1],{icon:endIcon}).addTo(leafMap).bindPopup('<b style="font-family:Barlow Condensed;font-size:13px">FIN</b>');
+  // Peak marker
+  let maxI=0;eles.forEach((e,i)=>{if(e>eles[maxI])maxI=i;});
+  L.marker(latlngs[maxI],{icon:peakIcon}).addTo(leafMap);
+  // Fit bounds
+  leafMap.fitBounds(L.latLngBounds(latlngs).pad(.12));
+  // Draw elevation profile
+  setTimeout(()=>drawElevProfile(eles),100);
+  // Update toggle buttons
+  setActiveLayer('topo');
+}
+
+function setLayer(name){
+  if(!leafMap)return;
+  leafMap.removeLayer(layers[currentLayer]);
+  layers[name].addTo(leafMap);
+  currentLayer=name;
+  setActiveLayer(name);
+}
+function setActiveLayer(name){
+  ['topo','sat','osm'].forEach(n=>{
+    const btn=document.getElementById('lb-'+n);
+    if(btn){btn.classList.toggle('active',n===name);}
+  });
+}
+
+function drawElevProfile(eles){
+  const cv=document.getElementById('elev-canvas');
+  if(!cv)return;
+  const dpr=window.devicePixelRatio||1,W=cv.offsetWidth||600,H=60;
+  cv.width=W*dpr;cv.height=H*dpr;
+  const c=cv.getContext('2d');c.scale(dpr,dpr);
+  const mn=Math.min(...eles),mx=Math.max(...eles);
+  const pts=eles.map((e,i)=>({x:(i/(eles.length-1))*(W-8)+4,y:H-4-((e-mn)/(mx-mn+1))*(H-10)}));
+  // Fill gradient
+  const g=c.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'rgba(0,200,150,.3)');g.addColorStop(1,'rgba(0,200,150,.02)');
+  c.beginPath();c.moveTo(pts[0].x,pts[0].y);
+  pts.forEach(p=>c.lineTo(p.x,p.y));
+  c.lineTo(pts[pts.length-1].x,H);c.lineTo(pts[0].x,H);c.closePath();
+  c.fillStyle=g;c.fill();
+  // Line
+  c.beginPath();c.moveTo(pts[0].x,pts[0].y);
+  pts.forEach(p=>c.lineTo(p.x,p.y));
+  c.strokeStyle='#00c896';c.lineWidth=1.8;c.stroke();
+  // Min/Max labels
+  c.font=`${8*dpr}px Barlow Condensed`;c.scale(1/dpr,1/dpr);
+  c.fillStyle='rgba(0,200,150,.7)';
+  c.fillText(Math.round(mn)+'m',4*dpr,(H-2)*dpr);
+  c.fillText(Math.round(mx)+'m',4*dpr,12*dpr);
+}
+
+function closeMap(){
+  document.getElementById('map-modal').classList.remove('open');
+  if(leafMap){leafMap.remove();leafMap=null;}
+}
+document.getElementById('map-modal').addEventListener('click',function(e){if(e.target===this)closeMap();});
+</script></body></html>
